@@ -1344,20 +1344,20 @@ function tuneStructureMaterial(sourceMat){
     if(!mat) return mat;
     const tuned = mat.clone ? mat.clone() : mat;
     if(tuned.color){
-      tuned.color.lerp(new THREE.Color(0xffffff), 0.28);
-      tuned.color.b = Math.min(1, tuned.color.b * 1.08 + 0.025);
+      tuned.color.multiplyScalar(0.72);
+      tuned.color.b = Math.min(1, tuned.color.b * 1.08 + 0.018);
     }
     if(tuned.map){
       tuned.map.encoding = THREE.sRGBEncoding || tuned.map.encoding;
       tuned.map.needsUpdate = true;
     }
     if(tuned.emissive){
-      tuned.emissive.set(0x2a241c);
-      tuned.emissiveIntensity = 0.16;
+      tuned.emissive.set(0x17100a);
+      tuned.emissiveIntensity = 0.04;
     }
-    if('roughness' in tuned) tuned.roughness = Math.max(0.54, Math.min(0.74, tuned.roughness ?? 0.62));
+    if('roughness' in tuned) tuned.roughness = Math.max(0.48, Math.min(0.68, tuned.roughness ?? 0.58));
     if('metalness' in tuned) tuned.metalness = 0;
-    if('envMapIntensity' in tuned) tuned.envMapIntensity = 0.22;
+    if('envMapIntensity' in tuned) tuned.envMapIntensity = 0.18;
     tuned.needsUpdate = true;
     return tuned;
   };
@@ -1365,7 +1365,14 @@ function tuneStructureMaterial(sourceMat){
 }
 
 function meshKey(ch){
-  return (ch.name||'').toLowerCase().replace(/[\s.-]+/g,'_');
+  const materialNames = Array.isArray(ch.material)
+    ? ch.material.map(m=>m?.name||'').join('_')
+    : (ch.material?.name||'');
+  const parentName = ch.parent?.name || '';
+  return [ch.name||'', materialNames, parentName]
+    .join('_')
+    .toLowerCase()
+    .replace(/[\s.-]+/g,'_');
 }
 
 function isContourMesh(ch){
@@ -1404,6 +1411,7 @@ function setupGLBScene(obj, wo){
     ch.castShadow = true; ch.receiveShadow = true;
 
     if(isContourMesh(ch)){
+      ch.userData.meshRole = 'contour';
       ch.material = new THREE.MeshStandardMaterial({
         color: new THREE.Color(getC4().hex),
         roughness: 0.48,
@@ -1411,9 +1419,11 @@ function setupGLBScene(obj, wo){
       });
 
     } else if(isStructureMesh(ch)){
+      ch.userData.meshRole = 'structure';
       ch.material = tuneStructureMaterial(ch.material);
 
     } else {
+      ch.userData.meshRole = isTressageMesh(ch) ? 'tressage' : 'other';
       // mesh_rotin : si texture baked dans le GLB → swap couleurs pures
       // sinon → fallback texture canvas procédurale
       const mat = Array.isArray(ch.material) ? ch.material[0] : ch.material;
@@ -1554,12 +1564,12 @@ function buildTabouret(w,wo,p){
 function applyTexture(){
   group.traverse(ch => {
     if(!ch.isMesh) return;
-    if(isContourMesh(ch)){
+    if(ch.userData.meshRole === 'contour' || isContourMesh(ch)){
       if(ch.material && ch.material.color){
         ch.material.color.set(getC4().hex);
         ch.material.needsUpdate = true;
       }
-    } else if(isStructureMesh(ch)){
+    } else if(ch.userData.meshRole === 'structure' || isStructureMesh(ch)){
       // Ne pas toucher
     } else {
       if(ch.material) {
