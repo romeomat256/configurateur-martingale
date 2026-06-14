@@ -1309,11 +1309,15 @@ function makeMaskShadeSwapMat(maskTex, shadeTex, c1hex, c2hex, c3hex, c4hex) {
         vec3 shadeSample = texture2D(uShade, vUv).rgb;
 
         float shadeLum = dot(shadeSample, vec3(0.299, 0.587, 0.114));
+        float sourceMax = max(max(shadeSample.r, shadeSample.g), shadeSample.b);
+        float sourceMin = min(min(shadeSample.r, shadeSample.g), shadeSample.b);
+        float sourceContrast = clamp((sourceMax - sourceMin) * 1.35, 0.0, 1.0);
 
-        bool isGap = (mask.r > 0.82 && mask.g > 0.82 && mask.b > 0.82);
+        bool isWhiteMask = (mask.r > 0.82 && mask.g > 0.82 && mask.b > 0.82);
+        bool isGap = isWhiteMask && shadeLum > 0.93 && sourceContrast < 0.08;
         bool isC4 = !isGap && mask.r > 0.55 && mask.b > 0.55 && mask.g < 0.45;
         bool isC1 = !isGap && !isC4 && mask.r >= mask.g && mask.r >= mask.b;
-        bool isC2 = !isGap && !isC4 && mask.g > mask.r && mask.g >= mask.b;
+        bool isC2 = !isGap && !isC4 && (isWhiteMask || (mask.g > mask.r && mask.g >= mask.b));
         bool isC3 = !isGap && !isC4 && mask.b > mask.r && mask.b > mask.g;
 
         if(isGap){
@@ -1325,10 +1329,6 @@ function makeMaskShadeSwapMat(maskTex, shadeTex, c1hex, c2hex, c3hex, c4hex) {
         if(isC2)      baseCol = uC2;
         else if(isC3) baseCol = uC3;
         else if(isC4) baseCol = uC4;
-
-        float sourceMax = max(max(shadeSample.r, shadeSample.g), shadeSample.b);
-        float sourceMin = min(min(shadeSample.r, shadeSample.g), shadeSample.b);
-        float sourceContrast = clamp((sourceMax - sourceMin) * 1.35, 0.0, 1.0);
 
         float zoneSignal = shadeLum;
         if(isC1)      zoneSignal = shadeSample.r;
@@ -1493,15 +1493,29 @@ function meshKey(ch){
   const materialNames = Array.isArray(ch.material)
     ? ch.material.map(m=>m?.name||'').join('_')
     : (ch.material?.name||'');
-  const parentName = ch.parent?.name || '';
-  return [ch.name||'', materialNames, parentName]
+  const parentNames = [];
+  let p = ch.parent;
+  while(p){
+    if(p.name) parentNames.push(p.name);
+    p = p.parent;
+  }
+  return [ch.name||'', materialNames, ...parentNames]
     .join('_')
     .toLowerCase()
     .replace(/[\s.-]+/g,'_');
 }
 
+function hasAncestorRole(ch, role){
+  let p = ch.parent;
+  while(p){
+    if(p.userData?.meshRole === role) return true;
+    p = p.parent;
+  }
+  return false;
+}
+
 function isContourMesh(ch){
-  if(ch?.userData?.meshRole === 'contour') return true;
+  if(ch?.userData?.meshRole === 'contour' || hasAncestorRole(ch, 'contour')) return true;
   const n = meshKey(ch);
   return n.includes('mesh_contour') || n === 'contour' || n.endsWith('_contour') || n.includes('contour_');
 }
@@ -1527,10 +1541,12 @@ function makeContourMaterial(){
 }
 
 function applyContourColor(ch){
-  if(!ch.material || Array.isArray(ch.material) || !ch.material.color){
+  if(!ch.material || Array.isArray(ch.material) || !ch.material.color || ch.material.uniforms){
     ch.material = makeContourMaterial();
   } else {
     ch.material.color.set(getC4().hex);
+    ch.material.roughness = 0.7;
+    ch.material.metalness = 0;
   }
   ch.material.needsUpdate = true;
 }
@@ -1550,8 +1566,8 @@ function setupGLBScene(obj, wo){
   obj.position.set(-center.x*scale, -box.min.y*scale, -center.z*scale);
 
   obj.traverse(node => {
-    const n = (node.name || '').toLowerCase();
-    if(n.includes('contour')){
+    const n = (node.name || '').toLowerCase().replace(/[\s.-]+/g,'_');
+    if(n.includes('mesh_contour') || n === 'contour' || n.endsWith('_contour') || n.includes('contour_')){
       node.traverse(child => { child.userData.meshRole = 'contour'; });
     }
   });
