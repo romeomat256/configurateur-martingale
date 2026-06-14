@@ -1365,6 +1365,10 @@ function makeMaskShadeSwapMat(maskTex, shadeTex, c1hex, c2hex, c3hex, c4hex) {
         float darkValley = (1.0 - fibreVolume) * darkFactor;
         col = max(col - vec3(darkValley * 0.035), vec3(0.0));
         col += vec3(darkCrest * 0.18);
+        float lightFactor = smoothstep(0.68, 0.96, baseLum);
+        float lightValley = (1.0 - fibreVolume) * lightFactor;
+        float lightCrease = sourceContrast * lightFactor;
+        col = max(col - vec3(lightValley * 0.16 + lightCrease * 0.08), vec3(0.0));
         col = mix(col, vec3(1.0), spec + rim + satin * 0.018);
         col = clamp(col, 0.0, 1.0);
 
@@ -1532,6 +1536,20 @@ function isTressageMesh(ch){
   );
 }
 
+function isLikelyContourMesh(ch){
+  if(!ch?.isMesh) return false;
+  const n = meshKey(ch);
+  if(n.includes('beziercircle') || n.includes('bordure') || n.includes('border') || n.includes('edge') || n.includes('jonc') || n.includes('liser')) return true;
+  const mats = Array.isArray(ch.material) ? ch.material : [ch.material];
+  return mats.some(m => {
+    if(!m?.color || m.uniforms || m.map) return false;
+    const r=m.color.r, g=m.color.g, b=m.color.b;
+    const lum = r*0.299 + g*0.587 + b*0.114;
+    const spread = Math.max(r,g,b)-Math.min(r,g,b);
+    return lum > 0.68 && spread < 0.22;
+  });
+}
+
 function makeContourMaterial(){
   return new THREE.MeshStandardMaterial({
     color: new THREE.Color(getC4().hex),
@@ -1585,7 +1603,14 @@ function setupGLBScene(obj, wo){
       ch.material = tuneStructureMaterial(ch.material);
 
     } else {
-      ch.userData.meshRole = isTressageMesh(ch) ? 'tressage' : 'other';
+      const tressageMesh = isTressageMesh(ch);
+      if(!tressageMesh && isLikelyContourMesh(ch)){
+        ch.userData.meshRole = 'contour';
+        ch.material = makeContourMaterial();
+        ch.material.needsUpdate = true;
+        return;
+      }
+      ch.userData.meshRole = tressageMesh ? 'tressage' : 'other';
       // mesh_rotin : si texture baked dans le GLB → swap couleurs pures
       // sinon → fallback texture canvas procédurale
       const mat = Array.isArray(ch.material) ? ch.material[0] : ch.material;
@@ -1728,7 +1753,8 @@ function buildTabouret(w,wo,p){
 function applyTexture(){
   group.traverse(ch => {
     if(!ch.isMesh) return;
-    if(ch.userData.meshRole === 'contour' || isContourMesh(ch)){
+    if(ch.userData.meshRole === 'contour' || isContourMesh(ch) || (ch.userData.meshRole === 'other' && isLikelyContourMesh(ch))){
+      ch.userData.meshRole = 'contour';
       applyContourColor(ch);
     } else if(ch.userData.meshRole === 'structure' || isStructureMesh(ch)){
       // Ne pas toucher
