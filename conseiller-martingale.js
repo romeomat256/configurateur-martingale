@@ -368,7 +368,16 @@
       }
     }
     brut.sort((x, y) => y.base - x.base);
-    const top = brut.slice(0, 250);
+    // Variété : au plus 10 alliances par dominante et 3 par paire dominante / équilibre,
+    // sinon quelques couleurs très bien notées occupent toute la liste
+    const parDom = {}, parPaire = {}, top = [];
+    for (const x of brut) {
+      const d = x.cols[0].id, p = d + '+' + x.cols[1].id;
+      if ((parDom[d] || 0) >= 10 || (parPaire[p] || 0) >= 3) continue;
+      parDom[d] = (parDom[d] || 0) + 1; parPaire[p] = (parPaire[p] || 0) + 1;
+      top.push(x);
+      if (top.length >= 400) break;
+    }
     const pc = CONFIG.poidsContour;
     return top.map(x => {
       let contour, alternatives;
@@ -393,19 +402,25 @@
 
   function selectionner(cands, n, rng, alea, exclure) {
     const ex = new Set(exclure || []);
-    const reste = cands.filter(c => !ex.has(cleDe(c))).sort((a, b) => b.total - a.total).slice(0, 150);
+    // Couleurs déjà montrées aux tours précédents (bouton « autres idées ») : on les fait tourner
+    const domVu = {}, colVu = {};
+    (exclure || []).forEach(k => { const ids = String(k).split('+'); domVu[ids[0]] = (domVu[ids[0]] || 0) + 1; ids.forEach(id => { colVu[id] = (colVu[id] || 0) + 1; }); });
+    const reste = cands.filter(c => !ex.has(cleDe(c))).sort((a, b) => b.total - a.total).slice(0, 300);
     const pris = [];
     while (pris.length < n && reste.length) {
       let best = -1e9, bi = 0;
       reste.forEach((c, i) => {
         let v = c.total + (rng() - 0.5) * 2 * alea;
+        v -= 9 * (domVu[c.cols[0].id] || 0);
+        c.cols.slice(1).forEach(x => { v -= 2.5 * (colVu[x.id] || 0); });
         for (const p of pris) {
-          if (p.cols[0].id === c.cols[0].id) v -= 25;
-          if (p.cols[1].id === c.cols[1].id) v -= 6;
+          if (p.cols[0].id === c.cols[0].id) v -= 30;
           const ids = new Set(p.cols.map(x => x.id));
-          if (c.cols.every(x => ids.has(x.id))) v -= 60;
+          const communes = c.cols.filter(x => ids.has(x.id)).length;
+          v -= communes * 8;
+          if (communes === c.cols.length) v -= 60;
           if (dE(p.r.mix, c.r.mix) < 0.05) v -= 18;
-          if (p.rec && c.rec && p.rec.id === c.rec.id) v -= 4;
+          if (p.rec && c.rec && p.rec.id === c.rec.id) v -= 10;
           if (p.contour.id === c.contour.id) v -= 6;
         }
         if (v > best) { best = v; bi = i; }
@@ -421,27 +436,103 @@
 
   function hash(s) { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h); }
 
+  // Noms d'alliance évocateurs, choisis selon la recette, puis la couleur dominante
+  const NOMS = {
+    terrasse: ['Grand café', 'Terrasse parisienne', 'Boulevard', 'Café du matin'],
+    graphique: ['Signature', 'Contraste net', 'Trait d\'encre', 'Graphique'],
+    bistrot: ['Comptoir', 'Zinc', 'Bistrot du coin', 'Apéritif'],
+    camaieu: ['Velours', 'Ton sur ton', 'Camaïeu', 'Douceur'],
+    'naturel-accent': ['Paillote', 'Été indien', 'Bord de mer', 'Sieste au soleil'],
+    profond: ['Bar à vin', 'Soirée', 'Feutré', 'Club'],
+    pastel: ['Riviera', 'Dragée', 'Glacier', 'Cabine de plage'],
+    complementaire: ['Contrepoint', 'Duo audacieux', 'Face à face', 'Coup d\'éclat']
+  };
+  const NOMS_LIBRES = {
+    clair: ['Lumière', 'Matin d\'été', 'Brise', 'Plein soleil'],
+    sombre: ['Velours', 'Nuit d\'été', 'Élégance', 'Fin de soirée'],
+    vif: ['Éclat', 'Fête', 'Fanfare', 'Pop'],
+    doux: ['Équilibre', 'Harmonie', 'Promenade', 'Dimanche']
+  };
+  const pick = (liste, cle) => liste[hash(cle) % liste.length];
+
   function nomAlliance(cols, rec) {
-    const d = cols[0];
-    let adjs = rec ? rec.adj : d.L >= 0.8 ? ['lumineux', 'léger', 'solaire'] : d.L <= 0.5 ? ['profond', 'élégant', 'dense'] : d.C >= 0.13 ? ['vif', 'éclatant', 'joyeux'] : ['élégant', 'doux', 'harmonieux'];
-    return cap(d.nomCourt) + ' ' + adjs[hash(cleDe({ cols })) % adjs.length];
+    const d = cols[0], cle = cleDe({ cols });
+    const liste = rec && NOMS[rec.id] ? NOMS[rec.id]
+      : d.L >= 0.8 ? NOMS_LIBRES.clair : d.L <= 0.5 ? NOMS_LIBRES.sombre : d.C >= 0.13 ? NOMS_LIBRES.vif : NOMS_LIBRES.doux;
+    return pick(liste, cle) + ' · ' + cap(d.nom || d.nomCourt);
   }
 
+  // Phrases courtes, plusieurs tournures par recette pour éviter la répétition
+  const PHRASES = {
+    terrasse: [
+      (d, s) => `${cap(le(d))} et ${le(s)}, le duo des terrasses parisiennes. Indémodable.`,
+      (d, s) => `Le contraste ${du(d)} et ${du(s)} : on se croirait boulevard Saint-Germain.`,
+      (d, s) => `${cap(bas(d))} et ${bas(s)}, un classique qui ne se démode jamais.`
+    ],
+    graphique: [
+      (d, s) => `${cap(le(d))} face à ${le(s)} : le motif saute aux yeux, même de loin.`,
+      (d, s) => `Un contraste franc entre ${le(d)} et ${le(s)}. Le tressage devient signature.`,
+      (d, s) => `${cap(bas(d))} et ${bas(s)}, net et graphique. Parfait pour être remarqué.`
+    ],
+    bistrot: [
+      (d, s) => `${cap(le(d))} donne le ton, ${le(s)} l'adoucit. L'esprit bistrot, en plus frais.`,
+      (d, s) => `Du caractère avec ${le(d)}, de la légèreté avec ${le(s)}.`,
+      (d, s) => `${cap(bas(d))} pour le caractère, ${bas(s)} pour la lumière : joyeux sans en faire trop.`
+    ],
+    camaieu: [
+      (d, s) => `${cap(le(d))} et ${le(s)} se répondent tout en nuance. Un rendu velouté.`,
+      (d, s) => `Un camaïeu ${de(d)} et ${de(s)}, doux et très chic.`,
+      (d, s) => `Ton sur ton entre ${le(d)} et ${le(s)} : élégant, sans effort.`
+    ],
+    'naturel-accent': [
+      (d, s, a) => `Une base ${bas(d)} toute naturelle, réveillée par ${du(a || s)}. Un air de vacances.`,
+      (d, s, a) => `${cap(le(d))} pour la douceur, ${le(a || s)} pour le pep's.`,
+      (d, s, a) => `L'esprit plage : ${bas(d)} en fond, ${bas(a || s)} en éclat.`
+    ],
+    profond: [
+      (d, s) => `${cap(le(d))} et ${le(s)}, une ambiance feutrée de fin de soirée.`,
+      (d, s) => `Des tons profonds, ${bas(d)} et ${bas(s)}. Chic et enveloppant.`,
+      (d, s) => `${cap(bas(d))} et ${bas(s)} : parfait pour un bar à vin ou une salle tamisée.`
+    ],
+    pastel: [
+      (d, s) => `${cap(le(d))} tout en douceur, avec ${le(s)} pour la lumière. Un parfum de Riviera.`,
+      (d, s) => `Doux et solaire : ${bas(d)} et ${bas(s)}, comme une glace en terrasse.`,
+      (d, s) => `${cap(bas(d))} et ${bas(s)}, frais du matin au soir.`
+    ],
+    complementaire: [
+      (d, s) => `${cap(le(d))} et ${le(s)} : deux opposés qui s'entendent bien.`,
+      (d, s) => `Un duo audacieux, ${bas(d)} et ${bas(s)}, adouci juste ce qu'il faut.`,
+      (d, s) => `${cap(bas(d))} et ${bas(s)} en contrepoint. Osé, mais maîtrisé.`
+    ]
+  };
+  const PHRASES_LIBRES = {
+    neutre: [(d, s) => `${cap(le(d))} en vedette, ${le(s)} pour l'équilibre. Simple et juste.`, (d, s) => `${cap(bas(d))} en vedette, ${bas(s)} en appui discret.`],
+    analogue: [(d, s) => `${cap(le(d))} et ${le(s)}, de la même famille : tout se tient.`, (d, s) => `${cap(bas(d))} et ${bas(s)} glissent l'un vers l'autre, en douceur.`],
+    'complementaire-doux': [(d, s) => `${cap(le(d))}, avec ${le(s)} en contrepoint doux.`],
+    autre: [(d, s) => `${cap(le(d))} avec ${le(s)}, tout simplement.`, (d, s) => `${cap(bas(d))} et ${bas(s)}, un accord simple.`]
+  };
+  const ACCENTS = [
+    a => `Une pointe ${de(a)} fait vibrer le motif.`,
+    a => `${cap(le(a))} en touche, pour le rythme.`,
+    a => `Et une note ${de(a)} qui attire l'œil.`
+  ];
+  const CONTOURS = {
+    echo: [c => `Contour ${bas(c)}, repris du tressage.`, c => `Le contour reprend ${le(c)}, tout est relié.`],
+    neutre: [c => `Contour ${bas(c)} pour encadrer l'assise.`, c => `Un contour ${bas(c)}, sobre, qui met le motif en valeur.`],
+    'ton-sur-ton': [() => 'Contour ton sur ton, presque invisible.', () => 'Contour ton sur ton, tout en discrétion.'],
+    accent: [c => `Contour ${bas(c)} en signature.`, c => `Et un contour ${bas(c)} pour signer l'ensemble.`]
+  };
+
   function pourquoi(cols, rec, relationType, contour) {
-    const [d, s, a] = cols;
+    const [d, s, a] = cols, cle = cleDe({ cols });
     let p;
-    if (rec) p = rec.phrase(d, s, a);
-    else if (relationType === 'neutre') p = `${cap(bas(d))} équilibré par ${du(s)}.`;
-    else if (relationType === 'analogue') p = `${cap(bas(d))} et ${bas(s)} dans la même famille de teinte.`;
-    else if (relationType === 'complementaire-doux') p = `${cap(bas(d))} réveillé par ${du(s)}, en opposition douce.`;
-    else p = `${cap(bas(d))} associé à ${du(s)}.`;
-    if (a && !(rec && rec.id === 'naturel-accent')) p += ` Accent ${bas(a)} pour rythmer le tressage.`;
+    if (rec && PHRASES[rec.id]) p = pick(PHRASES[rec.id], cle)(d, s, a);
+    else p = pick(PHRASES_LIBRES[relationType] || PHRASES_LIBRES.autre, cle)(d, s, a);
+    if (a && !(rec && rec.id === 'naturel-accent')) p += ' ' + pick(ACCENTS, cle + 'a')(a);
     if (contour) {
       const c = couleur(contour.id);
-      if (contour.style === 'echo') p += ` Contour ${bas(c)} repris du tressage.`;
-      else if (contour.style === 'neutre') p += ` Contour ${bas(c)} qui encadre l'assise.`;
-      else if (contour.style === 'ton-sur-ton') p += ' Contour ton sur ton, très discret.';
-      else p += ` Contour ${bas(c)} en signature.`;
+      const liste = CONTOURS[contour.style] || CONTOURS.accent;
+      p += ' ' + pick(liste, cle + 'c')(c);
     }
     return p;
   }

@@ -557,7 +557,7 @@ const COLORS=[
   {id:'bleu-roi',    name:'Bleu roi',         hex:'#3B3FB6'},
   {id:'bleu-marine', name:'Bleu marine',      hex:'#3D4E80'},
   // Jaunes — Luminosité
-  {id:'jaune-pastel',name:'Jaune pale',       hex:'#F0E87B'},
+  {id:'jaune-pastel',name:'Jaune pâle',       hex:'#F0E87B'},
 ];
 const BASE_COLORS=new Set(['naturel','brun']);
 let unlocked=new Set(COLORS.map(c=>c.id));
@@ -1122,11 +1122,23 @@ function esc(s){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch];
   });
 }
+// Noms courts pour les phrases du conseiller (« le prune » plutôt que « le prune veloutée »)
+const ADVISOR_SHORT_NAMES={
+  blanc:'blanc',ivoire:'ivoire',creme:'crème',ecru:'écru',argent:'argent',gris:'gris cendre',noir:'noir',
+  naturel:'camel',or:'or',bronze:'bronze',brun:'brun miel',chocolat:'chocolat',marron:'marron glacé',
+  peche:'pêche',saumon:'saumon',terracotta:'corail poudré',orange:'orange',jaune:'jaune citron',
+  rose:'rose bonbon',framboise:'framboise',fushia:'fuchsia',rouge:'rouge cerise','rouge-eau':'corail',bordeaux:'rouge bordeaux',
+  prune:'prune',lavende:'lavande','vert-citron':'vert citron','vert-eau':"vert d'eau",turquoise:'turquoise',
+  kaki:'kaki',olive:'olive',sapin:'vert sapin','vert-344':'vert menthe','vert-2260':'vert kaki clair',
+  'vert-pomme':'vert pomme','vert-diamant':'vert diamant',ciel:'bleu ciel',bleu:'bleu glacier',
+  'bleu-roi':'bleu roi','bleu-marine':'bleu marine','jaune-pastel':'jaune pâle'
+};
 function advisorPalette(){
   return {
     bois:{nom:'Structure bois',hex:'#7A5230'},
     couleurs:COLORS.map(function(c){
       var entry={id:c.id,nom:c.name,hex:c.hex};
+      if(ADVISOR_SHORT_NAMES[c.id])entry.nomConseiller=ADVISOR_SHORT_NAMES[c.id];
       if(['or','argent','bronze'].indexOf(c.id)>=0)entry.roles=['accent','contour'];
       return entry;
     })
