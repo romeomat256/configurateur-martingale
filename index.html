@@ -5,7 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Configurateur — Martingale Paris</title>
 <meta name="description" content="Composez votre chaise Martingale : choisissez votre structure en rotin, votre tressage et vos couleurs. Visualisez votre création en 3D et préparez votre devis.">
-<link rel="preload" as="image" href="./assets/chair-poster.webp">
 <meta name="theme-color" content="#50533a">
 <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg">
 <meta property="og:type" content="website">
@@ -355,10 +354,7 @@ button.acc-header{width:100%;border:0;background:transparent;text-align:left;fon
 #model-retry{border:0;border-radius:8px;padding:10px 20px;background:var(--olive);color:white;cursor:pointer;}
 #model-retry[hidden]{display:none;}
 
-.chair-poster{display:none;}
-.loading-overlay.initial-load{justify-content:flex-end;padding:14px;gap:7px;}
-.loading-overlay.initial-load .chair-poster{display:block;position:absolute;inset:6px 0 72px;width:100%;height:calc(100% - 78px);object-fit:contain;}
-.loading-overlay.initial-load .loading-spinner{width:20px;height:20px;}
+.loading-overlay.initial-load .loading-spinner,.loading-overlay.initial-load .loading-lbl{display:none;}
 @media(pointer:coarse){.zoom-controls,.vp-info,.vp-hint{display:none;}}
 @media(max-width:767px), (pointer:coarse) and (max-height:550px){
  .vp-info{display:none;}.vp-hint{display:none;}
@@ -426,7 +422,6 @@ button.acc-header{width:100%;border:0;background:transparent;text-align:left;fon
   <div class="viewport" style="padding-bottom:var(--bar);">
     <canvas id="cv3d"></canvas>
     <div id="loading-overlay" class="loading-overlay initial-load" role="status" aria-live="polite" aria-hidden="false">
-      <img class="chair-poster" src="./assets/chair-poster.webp" alt="Aperçu de la chaise Tradition" fetchpriority="high" decoding="async">
       <div class="loading-spinner" aria-hidden="true"></div>
       <span class="loading-lbl">Chargement du modèle…</span>
       <div class="loading-bar-track" aria-hidden="true"><div id="loading-bar" class="loading-bar-fill"></div></div>
@@ -2622,17 +2617,18 @@ async function generateExportPDF(){
 
   // Visuel principal et gros plans
   const rowTop=234;
-  pdf.addImage(views.troisQuarts,'JPEG',u(44),u(rowTop),u(340),u(425),'','FAST');
-  const tW=(706-340-24-12)/2, tH=tW*1.25;      // 165 × 206
+  const GAP=12, heroW=346, heroH=432;          // même écart partout entre les photos
+  pdf.addImage(views.troisQuarts,'JPEG',u(44),u(rowTop),u(heroW),u(heroH),'','FAST');
+  const tW=(706-heroW-2*GAP)/2, tH=(heroH-GAP)/2; // 168 × 210
   details.forEach((img,i)=>{
-    const x=44+340+24+(i%2)*(tW+12), y=rowTop+Math.floor(i/2)*(tH+12);
+    const x=44+heroW+GAP+(i%2)*(tW+GAP), y=rowTop+Math.floor(i/2)*(tH+GAP);
     pdf.addImage(img,'JPEG',u(x),u(y),u(tW),u(tH),'','FAST');
   });
 
   // Vues face, dos, côté + palette
-  const row2=rowTop+425+28, vW=160, vH=200;
-  ['face','dos','cote'].forEach((k,i)=>pdf.addImage(views[k],'JPEG',u(44+i*(vW+12)),u(row2),u(vW),u(vH),'','FAST'));
-  const palX=44+3*(vW+12), palW=750-palX;
+  const row2=rowTop+heroH+GAP, vW=160, vH=200;
+  ['face','dos','cote'].forEach((k,i)=>pdf.addImage(views[k],'JPEG',u(44+i*(vW+GAP)),u(row2),u(vW),u(vH),'','FAST'));
+  const palX=44+3*(vW+GAP), palW=750-palX;
   drawText('La palette',palX,row2+11,'display',13,INK,-0.03);
   const weaveSlots = WEAVE_COLOR_SLOTS[S.weave]||[];
   const colorGetters = {c1:getC1,c2:getC2,c3:getC3,c4:getC4,c5:getC5};
