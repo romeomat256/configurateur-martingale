@@ -1,12 +1,18 @@
 /*
-  Conseiller Martingale v1
-  Moteur d'alliances couleurs pour le configurateur CHR.
+  Conseiller Martingale v2
+  Harmonies de couleurs par ambiance (thème), pour le configurateur CHR.
 
-  Espace colorimétrique : OKLab / OKLCH
-    L = clarté (0 noir, 1 blanc), C = saturation, H = teinte en degrés.
+  Principe
+    1. Chaque ambiance décrit ses couleurs par rôle : dominante, équilibre, accent, contour.
+       Ce sont des choix de direction artistique, à ajuster ici, sans toucher au moteur.
+    2. Le moteur combine ces couleurs, élimine ce qui ne tient pas (motif illisible,
+       couleurs qui vibrent ou se battent, trop de couleurs vives), note le reste.
+    3. Les harmonies « signatures » de chaque ambiance passent en priorité.
+    4. La sélection varie les propositions et se souvient de ce qui a déjà été montré.
 
-  Navigateur : charger conseiller-martingale.js puis utiliser window.ConseillerMartingale
-  Node       : const CM = require('./conseiller-martingale.js')
+  Espace colorimétrique : OKLab (L clarté 0..1, C saturation, H teinte en degrés).
+  Navigateur : window.ConseillerMartingale ; Node : require('./conseiller-martingale.js')
+  API : charger, configurer, couleur, recommander, diagnostiquer, contoursPour, THEMES
 */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -14,140 +20,209 @@
 })(typeof self !== 'undefined' ? self : this, function () {
   'use strict';
 
-  /* ================= Réglages à ajuster ================= */
+  /* ================= Tressages ================= */
 
-  const CONFIG = {
-    contourSlot: 'c4',   // case couleur du contour dans le configurateur
-    bois: '#7A5230',     // structure bois (écrasé par palette.bois si présent)
-    seuil: 55,           // note minimale pour proposer une alliance
-    ecartMin: 0.07,      // écart minimal entre deux couleurs du tressage
-    poidsContour: 0.2    // part du contour dans la note finale
-  };
-
-  // slots : cases remplies par le conseiller, dans l'ordre des rôles (dominante, équilibre, accent)
-  // couverture : part de surface approximative de chaque slot
-  // contraste : écart de clarté idéal entre dominante et équilibre
-  // À caler sur les slots réels du mode manuel.
+  // slots : cases du tressage dans l'ordre des rôles (dominante, équilibre, accent)
+  // echo  : cases qui reprennent la couleur d'un autre rôle (4e couleur Maille et Damier)
+  // lisible : écart de clarté minimal entre dominante et équilibre pour que le motif se lise
   const TRESSAGES = {
-    // Maille, mesuré sur le masque : croix A (c1) 29 %, croix B (c3) 29 %, fuseaux (c2) 24 %, grille (c5) 18 %.
-    // La grille reprend la dominante : dominante = c1 + c5 (47 %), équilibre = croix B, accent = fuseaux.
-    maille:  { label: 'Maille',  slots: ['c1', 'c3', 'c2'], echo: { c5: 'c1' }, couverture: [0.47, 0.29, 0.24], contraste: [0.20, 0.40] },
-    // Damier, mesuré sur la tuile 10 x 8 : c1 20 %, c2 20 %, c3 30 %, c5 30 %. c5 reprend la dominante c1.
-    damier:  { label: 'Damier',  slots: ['c1', 'c3', 'c2'], echo: { c5: 'c1' }, couverture: [0.50, 0.30, 0.20], contraste: [0.30, 0.65] },
-    serge:   { label: 'Sergé',   slots: ['c1', 'c2'],       couverture: [0.50, 0.50],       contraste: [0.08, 0.25] },
-    chevron: { label: 'Chevron', slots: ['c1', 'c2'],       couverture: [0.50, 0.50],       contraste: [0.08, 0.25] },
-    natte:   { label: 'Natté',   slots: ['c1', 'c2', 'c3'], couverture: [0.50, 0.35, 0.15], contraste: [0.15, 0.35] },
-    bourdon: { label: 'Bourdon', slots: ['c1', 'c2'],       couverture: [0.65, 0.35],       contraste: [0.12, 0.35] }
+    maille:  { label: 'Maille',  slots: ['c1', 'c3', 'c2'], echo: { c5: 'c1' }, lisible: 0.12 },
+    damier:  { label: 'Damier',  slots: ['c1', 'c3', 'c2'], echo: { c5: 'c1' }, lisible: 0.16 },
+    natte:   { label: 'Natté',   slots: ['c1', 'c2', 'c3'], lisible: 0.10 },
+    serge:   { label: 'Sergé',   slots: ['c1', 'c2'], lisible: 0.08 },
+    chevron: { label: 'Chevron', slots: ['c1', 'c2'], lisible: 0.08 },
+    bourdon: { label: 'Bourdon', slots: ['c1', 'c2'], lisible: 0.08 }
   };
+  const CONFIG = { contourSlot: 'c4', bois: '#7A5230' };
 
-  const ROLES = ['dominante', 'equilibre', 'accent'];
+  /* ================= Ambiances ================= */
+
+  // Les identifiants absents de la palette sont ignorés (ex. couleurs pas encore au nuancier).
+  // contraste : écart de clarté souhaité entre dominante et équilibre [min, max]
+  // vifs      : nombre maximal de couleurs très saturées dans le tressage
+  // signatures: harmonies choisies à la main [dominante, équilibre, accent, contour]
+  const THEMES = {
+    brasserie: {
+      label: 'Brasserie parisienne', contraste: [0.35, 0.8], vifs: 1,
+      dom: ['noir', 'bordeaux', 'rouge', 'sapin', 'bleu-marine', 'bleu-nuit', 'anthracite', 'marron', 'vert-emeraude'],
+      eq: ['blanc', 'ivoire', 'creme', 'ecru'],
+      acc: ['or', 'rouge', 'bordeaux', 'sapin', 'bleu-roi', 'noir', 'naturel', 'moutarde'],
+      contour: ['blanc', 'noir', 'creme', 'ecru'],
+      signatures: [['noir', 'blanc', 'or', 'blanc'], ['bordeaux', 'creme', 'noir', 'creme'], ['sapin', 'ivoire', 'bordeaux', 'ivoire'],
+        ['bleu-marine', 'blanc', 'rouge', 'blanc'], ['rouge', 'blanc', 'noir', 'noir'], ['noir', 'creme', 'bordeaux', 'creme']],
+      noms: ['Grand café', 'Boulevard', 'Zinc', 'Comptoir', 'Rive gauche', 'Terrasse du matin'],
+      phrases: [
+        (d, e) => `${Le(d)} et ${le(e)}, le duo des grandes brasseries. Indémodable.`,
+        (d, e) => `Le contraste ${du(d)} et ${du(e)}, comme sur les terrasses des boulevards.`,
+        (d, e) => `${Le(d)} donne le ton, ${le(e)} éclaire l'assise. Paris, tout simplement.`,
+        (d, e) => `Un classique de brasserie : ${bas(d)} et ${bas(e)}, net et élégant.`
+      ]
+    },
+    riviera: {
+      label: 'Riviera', contraste: [0.12, 0.5], vifs: 2,
+      dom: ['ciel', 'bleu', 'turquoise', 'jaune-pastel', 'rose', 'peche', 'vert-344', 'lavende', 'saumon'],
+      eq: ['blanc', 'ivoire', 'creme'],
+      acc: ['bleu-roi', 'bleu-marine', 'rouge', 'orange', 'framboise', 'jaune', 'rouge-eau', 'turquoise'],
+      contour: ['blanc', 'ivoire', 'bleu-marine', 'bleu-roi'],
+      signatures: [['ciel', 'blanc', 'bleu-marine', 'blanc'], ['jaune-pastel', 'blanc', 'bleu-roi', 'blanc'], ['rose', 'creme', 'rouge-eau', 'creme'],
+        ['turquoise', 'ivoire', 'orange', 'ivoire'], ['bleu', 'blanc', 'jaune', 'blanc']],
+      noms: ['Riviera', 'Promenade', 'Dolce vita', 'Cabine de plage', 'Port de pêche', 'Glacier'],
+      phrases: [
+        (d, e) => `${Le(d)} et ${le(e)}, un parfum de Méditerranée. Frais du matin au soir.`,
+        (d, e) => `Doux et solaire : ${bas(d)} et ${bas(e)}, comme une glace en terrasse.`,
+        (d, e) => `${Le(d)} sur fond ${de(e)} : on entend presque les vagues.`,
+        (d, e) => `L'esprit Riviera, ${bas(d)} et ${bas(e)}. Léger, lumineux, joyeux.`
+      ]
+    },
+    cotebasque: {
+      label: 'Côte basque', contraste: [0.3, 0.8], vifs: 1,
+      dom: ['rouge', 'bordeaux', 'sapin', 'vert-emeraude', 'kaki', 'bleu-marine'],
+      eq: ['blanc', 'ecru', 'creme', 'ivoire'],
+      acc: ['rouge', 'sapin', 'vert-emeraude', 'bordeaux', 'bleu-marine', 'noir', 'vert-eau'],
+      contour: ['blanc', 'rouge', 'sapin', 'ecru'],
+      signatures: [['rouge', 'blanc', 'sapin', 'blanc'], ['sapin', 'blanc', 'rouge', 'blanc'], ['bordeaux', 'ecru', 'sapin', 'ecru'],
+        ['bleu-marine', 'blanc', 'rouge', 'blanc'], ['vert-emeraude', 'blanc', 'rouge', 'blanc']],
+      noms: ['Pays basque', 'Fronton', 'Txoko', 'Linge basque', 'Piment', 'Grande plage'],
+      phrases: [
+        (d, e) => `${Le(d)} et ${le(e)}, les couleurs du linge basque. Franc et chaleureux.`,
+        (d, e) => `${Le(d)} sur ${le(e)} : un air de fête de village, entre océan et montagne.`,
+        (d, e) => `L'esprit de la côte basque, ${bas(d)} et ${bas(e)}. Simple et vivant.`,
+        (d, e) => `${Le(d)} pour le caractère, ${le(e)} pour la lumière de l'océan.`
+      ]
+    },
+    barvin: {
+      label: 'Bar à vin', contraste: [0.2, 0.6], vifs: 1,
+      dom: ['bordeaux', 'prune', 'marron', 'chocolat', 'olive', 'sapin', 'noir', 'bleu-marine', 'anthracite'],
+      eq: ['ecru', 'creme', 'naturel', 'kaki', 'gris', 'ivoire', 'greige'],
+      acc: ['or', 'bronze', 'rouge-eau', 'orange', 'framboise', 'moutarde', 'terracotta-brique', 'bordeaux'],
+      contour: ['noir', 'marron', 'chocolat', 'creme', 'ecru'],
+      signatures: [['bordeaux', 'creme', 'or', 'bordeaux'], ['prune', 'naturel', 'noir', 'noir'], ['marron', 'ecru', 'orange', 'marron'],
+        ['olive', 'creme', 'bordeaux', 'olive'], ['noir', 'naturel', 'bordeaux', 'noir']],
+      noms: ['Bar à vin', 'Cave', 'Fin de soirée', 'Velours', 'Tannin', 'Comptoir à vin'],
+      phrases: [
+        (d, e) => `${Le(d)} et ${le(e)}, une ambiance feutrée de fin de soirée.`,
+        (d, e) => `Des tons profonds, ${bas(d)} et ${bas(e)}. Chic et enveloppant, comme un bon verre.`,
+        (d, e) => `${Le(d)} réchauffé par ${le(e)} : parfait pour une cave ou une salle tamisée.`,
+        (d, e) => `${Le(d)} et ${le(e)}, tout en rondeur. On s'y attarde volontiers.`
+      ]
+    },
+    hotelchic: {
+      label: 'Hôtel chic', contraste: [0.2, 0.75], vifs: 0,
+      dom: ['creme', 'ecru', 'gris', 'vert-2260', 'vert-diamant', 'ivoire', 'olive', 'greige', 'taupe', 'sauge'],
+      eq: ['noir', 'olive', 'marron', 'chocolat', 'bleu-marine', 'kaki', 'anthracite', 'bleu-nuit'],
+      acc: ['or', 'bronze', 'argent', 'bordeaux', 'sapin', 'noir'],
+      contour: ['noir', 'creme', 'ecru', 'olive', 'marron'],
+      signatures: [['creme', 'noir', 'or', 'noir'], ['vert-2260', 'olive', 'or', 'olive'], ['ecru', 'bleu-marine', 'or', 'ecru'],
+        ['gris', 'noir', 'argent', 'noir'], ['ivoire', 'chocolat', 'bronze', 'chocolat']],
+      noms: ['Lobby', 'Palace', 'Salon', 'Suite', 'Patio', 'Hôtel particulier'],
+      phrases: [
+        (d, e) => `${Le(d)} tout en retenue, souligné par ${le(e)}. Le luxe discret.`,
+        (d, e) => `${Le(d)} et ${le(e)} : une élégance calme, digne d'un beau lobby.`,
+        (d, e) => `Des teintes posées, ${bas(d)} et ${bas(e)}. Chic sans jamais en faire trop.`,
+        (d, e) => `${Le(d)} pour la douceur, ${le(e)} pour la tenue. Très hôtel particulier.`
+      ]
+    },
+    plage: {
+      label: 'Bord de mer', contraste: [0.1, 0.6], vifs: 1,
+      dom: ['naturel', 'creme', 'ecru', 'ivoire', 'ciel', 'turquoise'],
+      eq: ['blanc', 'naturel', 'bleu-marine', 'sapin', 'ecru', 'bleu-nuit'],
+      acc: ['orange', 'jaune', 'terracotta', 'rouge-eau', 'turquoise', 'bleu', 'bleu-roi', 'rouge'],
+      contour: ['blanc', 'naturel', 'ecru', 'bleu-marine'],
+      signatures: [['naturel', 'blanc', 'bleu-marine', 'blanc'], ['ecru', 'bleu-marine', 'rouge-eau', 'ecru'], ['creme', 'naturel', 'turquoise', 'naturel'],
+        ['ivoire', 'sapin', 'orange', 'ivoire'], ['ciel', 'blanc', 'rouge', 'blanc']],
+      noms: ['Paillote', 'Bord de mer', 'Sieste au soleil', 'Marée haute', 'Cabanon', 'Grande bleue'],
+      phrases: [
+        (d, e) => `Une base ${bas(d)} toute naturelle avec ${le(e)}. Un air de vacances.`,
+        (d, e) => `${Le(d)} et ${le(e)}, comme le sable et l'écume. Les pieds dans l'eau.`,
+        (d, e) => `L'esprit paillote : ${bas(d)} et ${bas(e)}, simple et lumineux.`,
+        (d, e) => `${Le(d)} et ${le(e)} pour une terrasse face à la mer.`
+      ]
+    },
+    guinguette: {
+      label: 'Guinguette', contraste: [0.15, 0.6], vifs: 1,
+      dom: ['vert-2260', 'vert-diamant', 'vert-344', 'kaki', 'vert-pomme', 'vert-citron', 'sapin', 'jaune-pastel', 'sauge', 'vert-eau'],
+      eq: ['blanc', 'creme', 'ecru', 'ivoire'],
+      acc: ['rose', 'framboise', 'rouge-eau', 'orange', 'jaune', 'lavende', 'rouge', 'vieux-rose'],
+      contour: ['blanc', 'creme', 'sapin', 'kaki'],
+      signatures: [['vert-2260', 'blanc', 'framboise', 'blanc'], ['sapin', 'creme', 'rose', 'creme'], ['vert-344', 'ecru', 'rouge-eau', 'ecru'],
+        ['kaki', 'ivoire', 'orange', 'kaki'], ['vert-diamant', 'blanc', 'lavende', 'blanc']],
+      noms: ['Guinguette', 'Bord de Marne', "Jardin d'été", 'Tonnelle', 'Pique-nique', 'Dimanche au vert'],
+      phrases: [
+        (d, e) => `${Le(d)} et ${le(e)}, comme une tonnelle un dimanche d'été.`,
+        (d, e) => `Du vert, de la fraîcheur : ${bas(d)} et ${bas(e)}. On a envie de rester dehors.`,
+        (d, e) => `${Le(d)} sur ${le(e)} : l'esprit guinguette, gai et sans façon.`,
+        (d, e) => `${Le(d)} et ${le(e)}, un jardin en terrasse.`
+      ]
+    },
+    pop: {
+      label: 'Pop graphique', contraste: [0.25, 0.9], vifs: 3, osé: true,
+      dom: ['jaune', 'orange', 'framboise', 'bleu-roi', 'turquoise', 'vert-citron', 'rose', 'rouge', 'fushia'],
+      eq: ['blanc', 'noir', 'bleu-marine', 'creme'],
+      acc: ['jaune', 'orange', 'framboise', 'bleu-roi', 'turquoise', 'vert-citron', 'rose', 'rouge', 'bleu'],
+      contour: ['noir', 'blanc'],
+      signatures: [['jaune', 'blanc', 'bleu-roi', 'noir'], ['framboise', 'blanc', 'orange', 'blanc'], ['bleu-roi', 'blanc', 'jaune', 'bleu-roi'],
+        ['vert-citron', 'noir', 'rose', 'noir'], ['orange', 'blanc', 'bleu-roi', 'blanc']],
+      noms: ['Pop', 'Néon', 'Coup d\'éclat', 'Rooftop', 'Club', 'Graphique'],
+      phrases: [
+        (d, e) => `${Le(d)} et ${le(e)} face à face : le motif claque, même de loin.`,
+        (d, e) => `${Le(d)} en vedette, ${le(e)} pour la netteté. Impossible de passer à côté.`,
+        (d, e) => `Un duo audacieux, ${bas(d)} et ${bas(e)}. Fait pour être photographié.`,
+        (d, e) => `${Le(d)} et ${le(e)}, énergie maximale. L'esprit rooftop.`
+      ]
+    }
+  };
+  const ORDRE_THEMES = ['brasserie', 'riviera', 'cotebasque', 'barvin', 'hotelchic', 'plage', 'guinguette', 'pop'];
 
   /* ================= Couleur ================= */
 
   function srgbToLin(v) { v /= 255; return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }
-  function linToSrgb(v) {
-    v = v <= 0.0031308 ? 12.92 * v : 1.055 * Math.pow(v, 1 / 2.4) - 0.055;
-    return Math.round(Math.min(1, Math.max(0, v)) * 255);
-  }
-  function hexToLin(hex) {
+  function analyser(hex) {
     const n = parseInt(String(hex).replace('#', ''), 16);
-    return [srgbToLin((n >> 16) & 255), srgbToLin((n >> 8) & 255), srgbToLin(n & 255)];
-  }
-  function linToHex(l) { return '#' + l.map(v => linToSrgb(v).toString(16).padStart(2, '0')).join('').toUpperCase(); }
-  function linToLab(r, g, b) {
+    const r = srgbToLin((n >> 16) & 255), g = srgbToLin((n >> 8) & 255), b = srgbToLin(n & 255);
     const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
     const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
     const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
-    return [
-      0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s,
-      1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s,
-      0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
-    ];
-  }
-  function analyser(hex) {
-    const lin = hexToLin(hex);
-    const lab = linToLab(lin[0], lin[1], lin[2]);
-    const C = Math.hypot(lab[1], lab[2]);
-    const H = (Math.atan2(lab[2], lab[1]) * 180 / Math.PI + 360) % 360;
-    return { lin, lab, L: lab[0], C, H };
+    const lab = [0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s, 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s, 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s];
+    return { lab, L: lab[0], C: Math.hypot(lab[1], lab[2]), H: (Math.atan2(lab[2], lab[1]) * 180 / Math.PI + 360) % 360 };
   }
   const dE = (a, b) => Math.hypot(a.lab[0] - b.lab[0], a.lab[1] - b.lab[1], a.lab[2] - b.lab[2]);
   const dL = (a, b) => Math.abs(a.L - b.L);
   const dH = (a, b) => { const d = Math.abs(a.H - b.H) % 360; return d > 180 ? 360 - d : d; };
 
-  function melange(cols, poids) {
-    const l = [0, 0, 0]; let tot = 0;
-    cols.forEach((c, i) => { const w = poids[i] || 0; tot += w; for (let k = 0; k < 3; k++) l[k] += c.lin[k] * w; });
-    const lin = l.map(v => v / (tot || 1));
-    const a = linToLab(lin[0], lin[1], lin[2]);
-    return { lin, lab: a, L: a[0], C: Math.hypot(a[1], a[2]), H: (Math.atan2(a[2], a[1]) * 180 / Math.PI + 360) % 360, hex: linToHex(lin) };
-  }
-
   /* ================= Palette ================= */
 
-  let PALETTE = [];      // couleurs utilisables
-  let PAR_ID = {};       // id -> couleur (alias inclus, redirigés)
-  let BOIS = analyser(CONFIG.bois);
-  let VALIDES = null;    // alliances validées à la main
+  let PALETTE = [], PAR_ID = {}, BOIS = analyser(CONFIG.bois);
 
   function norm(s) {
-    return String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-      .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   }
-
-  function preparer(e) {
-    const a = analyser(e.hex);
-    const nomCourt = (e.nomConseiller || e.nom).replace(/\s+\d+$/, '').trim();
-    const c = Object.assign({}, e, a, { nomCourt, roles: e.roles || ROLES.concat('contour') });
-    c.appui = c.C < 0.045 || (c.L >= 0.88 && c.C < 0.085) || (c.L <= 0.40 && c.C < 0.07);
-    c.clair = c.L >= 0.85 && c.C < 0.085;
-    return c;
-  }
-
   function charger(palette) {
     const liste = Array.isArray(palette) ? palette : palette.couleurs;
-    if (palette.bois && palette.bois.hex) BOIS = analyser(palette.bois.hex);
+    if (palette && palette.bois && palette.bois.hex) BOIS = analyser(palette.bois.hex);
     PALETTE = []; PAR_ID = {};
-    liste.forEach(e => { if (!e.alias_de && e.actif !== false && e.hex) { const c = preparer(e); PALETTE.push(c); PAR_ID[c.id] = c; } });
-    liste.forEach(e => { if (e.alias_de && PAR_ID[e.alias_de]) PAR_ID[e.id] = PAR_ID[e.alias_de]; });
+    liste.forEach(e => {
+      if (!e || !e.hex || e.actif === false) return;
+      const c = Object.assign({}, e, analyser(e.hex));
+      c.nomCourt = (e.nomConseiller || e.nom || e.id).trim();
+      c.neutre = c.C < 0.045;
+      c.vif = c.C >= 0.13;
+      PALETTE.push(c); PAR_ID[c.id] = c;
+    });
     return PALETTE.length;
   }
-
   function couleur(id) {
     if (!id) return null;
-    if (typeof id === 'object') return id.lab ? id : PAR_ID[id.id];
-    return PAR_ID[id] || PAR_ID[norm(id)] || PALETTE.find(c => norm(c.nom) === norm(id) || c.hex.toLowerCase() === String(id).toLowerCase()) || null;
+    if (typeof id === 'object') return PAR_ID[id.id] || null;
+    return PAR_ID[id] || PALETTE.find(c => norm(c.nom) === norm(id) || norm(c.id) === norm(id)) || null;
   }
-
   function configurer(o) {
     o = o || {};
     if (o.tressages) Object.keys(o.tressages).forEach(k => { TRESSAGES[k] = Object.assign({}, TRESSAGES[k] || {}, o.tressages[k]); });
-    ['contourSlot', 'seuil', 'ecartMin', 'poidsContour'].forEach(k => { if (o[k] !== undefined) CONFIG[k] = o[k]; });
+    if (o.contourSlot) CONFIG.contourSlot = o.contourSlot;
     if (o.bois) { CONFIG.bois = o.bois; BOIS = analyser(o.bois); }
+    if (o.themes) Object.keys(o.themes).forEach(k => { THEMES[k] = Object.assign({}, THEMES[k] || {}, o.themes[k]); });
   }
-
-  function tressage(id) {
-    const k = norm(id);
-    const t = TRESSAGES[k];
-    if (!t) throw new Error('Tressage inconnu : ' + id + '. Tressages : ' + Object.keys(TRESSAGES).join(', '));
-    return Object.assign({ id: k }, t);
-  }
-
-  /* ================= Familles ================= */
-
-  const FAMILLES = {
-    aucune:   { label: 'Aucune nuance', test: () => true },
-    naturels: { label: 'Naturels', test: ([d]) => d.id === 'naturel' || (d.H >= 40 && d.H <= 110 && d.C <= 0.10 && d.L >= 0.5) || (d.C < 0.03 && d.L > 0.8) },
-    rouges:   { label: 'Rouges', test: ([d]) => (d.H >= 330 || d.H < 40) && d.C >= 0.08 },
-    verts:    { label: 'Verts', test: ([d]) => d.H >= 108 && d.H < 190 && d.C >= 0.045 },
-    bleus:    { label: 'Bleus', test: ([d]) => d.H >= 190 && d.H < 300 && d.C >= 0.025 },
-    chauds:   { label: 'Chauds', test: ([d]) => d.H >= 25 && d.H < 108 && d.C >= 0.085 },
-    clairs:   { label: 'Clairs', test: cols => cols[0].L >= 0.78 && cols.every(c => c.L >= 0.62) },
-    profonds: { label: 'Profonds', test: ([d]) => d.L <= 0.50 }
-  };
-  const ALIAS_FAMILLE = { 'aucune-nuance': 'aucune', naturel: 'naturels', rouge: 'rouges', vert: 'verts', bleu: 'bleus', chaud: 'chauds', clair: 'clairs', profond: 'profonds' };
-  function famille(id) { const k = norm(id || 'aucune'); return FAMILLES[ALIAS_FAMILLE[k] || k] || FAMILLES.aucune; }
-  function famillesDe(cols) { return Object.keys(FAMILLES).filter(k => k !== 'aucune' && FAMILLES[k].test(cols)); }
+  const ids = l => (l || []).map(couleur).filter(Boolean);
 
   /* ================= Textes ================= */
 
@@ -157,271 +232,122 @@
   const de = c => (voyelle(bas(c)) ? "d'" : 'de ') + bas(c);
   const le = c => (voyelle(bas(c)) ? "l'" : 'le ') + bas(c);
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  const Le = c => cap(le(c));
+  function hash(s) { let h = 7; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h); }
+  const pick = (liste, cle) => liste[hash(cle) % liste.length];
 
-  /* ================= Recettes signatures ================= */
-  // Chaque recette décrit des rôles, pas des couleurs figées. À enrichir avec la graphiste.
-
-  const naturel = c => c.id === 'naturel' || (c.H >= 45 && c.H <= 105 && c.C >= 0.015 && c.C <= 0.09 && c.L >= 0.6);
-
-  const RECETTES = [
-    { id: 'terrasse', label: 'Terrasse classique', adj: ['classique', 'intemporel', 'de terrasse'],
-      test: (d, s) => (d.clair && s.L <= 0.46) || (s.clair && d.L <= 0.46),
-      phrase: (d, s) => `Le contraste ${du(d)} et ${du(s)}, comme sur les terrasses parisiennes.` },
-    { id: 'graphique', label: 'Graphique', adj: ['graphique', 'affirmé', 'signature'], tressages: ['damier', 'maille'],
-      test: (d, s) => dL(d, s) >= 0.45,
-      phrase: (d, s) => `Contraste fort entre ${le(d)} et ${le(s)} : le motif ressort nettement.` },
-    { id: 'bistrot', label: 'Bistrot bicolore', adj: ['bistrot', 'franc', 'lumineux'],
-      test: (d, s) => d.C >= 0.10 && d.L < 0.8 && s.clair,
-      phrase: (d, s) => `${cap(bas(d))} franc, adouci par ${du(s)}.` },
-    { id: 'camaieu', label: 'Camaïeu', adj: ['camaïeu', 'velouté', 'ton sur ton'], tressages: ['serge', 'chevron', 'natte', 'bourdon', 'maille'],
-      test: (d, s, a) => d.C >= 0.045 && s.C >= 0.045 && dH(d, s) <= 30 && dL(d, s) >= 0.1 && (!a || a.appui || dH(d, a) <= 30),
-      phrase: (d, s) => `Camaïeu ${de(d)} et ${bas(s)} pour un rendu velouté.` },
-    { id: 'naturel-accent', label: 'Naturel et accent', adj: ['solaire', 'naturel', 'de plage'],
-      test: (d, s, a) => naturel(d) && (a || s).C >= 0.11,
-      phrase: (d, s, a) => `Base ${bas(d)} réveillée par ${du(a || s)}.` },
-    { id: 'profond', label: 'Profond', adj: ['profond', 'feutré', 'nocturne'],
-      test: (d, s, a) => d.L <= 0.47 && s.L <= 0.62 && (!a || a.L >= 0.75),
-      phrase: (d, s) => `Tons profonds ${de(d)} et ${de(s)}, ambiance feutrée.` },
-    { id: 'pastel', label: 'Pastel', adj: ['pastel', 'poudré', 'riviera'],
-      test: (d, s) => d.L >= 0.78 && d.C >= 0.05 && s.clair,
-      phrase: (d, s) => `${cap(bas(d))} tout en douceur, éclairé par ${du(s)}.` },
-    { id: 'complementaire', label: 'Complémentaire doux', adj: ['contrasté', 'vibrant', 'audacieux'],
-      test: (d, s) => dH(d, s) >= 150 && Math.min(d.C, s.C) < 0.08 && Math.max(d.C, s.C) >= 0.10,
-      phrase: (d, s) => `${cap(bas(d))} réveillé par ${du(s)}, en opposition douce.` }
+  const ACCENTS = [
+    a => `Une pointe ${de(a)} fait vibrer le motif.`,
+    a => `${Le(a)} en touche, pour le rythme.`,
+    a => `Et une note ${de(a)} qui attire l'œil.`,
+    a => `${Le(a)} vient réveiller le tressage.`
   ];
+  const CONTOURS = {
+    echo: [c => `Contour ${bas(c)}, repris du tressage.`, c => `Le contour reprend ${le(c)} : tout est relié.`],
+    neutre: [c => `Contour ${bas(c)} pour encadrer l'assise.`, c => `Un contour ${bas(c)}, sobre, qui met le motif en valeur.`],
+    signature: [c => `Contour ${bas(c)} en signature.`, c => `Et un contour ${bas(c)} pour signer l'ensemble.`]
+  };
+  const STYLE_LABEL = { echo: 'Écho du tressage', neutre: 'Neutre', signature: 'Signature' };
 
-  function recettePour(cols, t) {
-    const [d, s, a] = cols;
-    return RECETTES.find(r => (!r.tressages || r.tressages.includes(t.id)) && r.test(d, s, a)) || null;
-  }
+  /* ================= Notation ================= */
 
-  /* ================= Notation du tressage ================= */
-
-  function relation(a, b) {
-    if (a.appui || b.appui) return { type: 'neutre', pts: 6 };
-    const h = dH(a, b), minC = Math.min(a.C, b.C);
-    if (h <= 35) return { type: 'analogue', pts: 6 };
-    if (h >= 150) return minC < 0.08 ? { type: 'complementaire-doux', pts: 5 } : { type: 'complementaire-franc', pts: -8 };
-    if (minC > 0.08) return { type: 'discordant', pts: -12 };
-    return { type: 'tolere', pts: -2 };
-  }
-
-  function vibre(a, b) { return a.C > 0.10 && b.C > 0.10 && dL(a, b) < 0.10 && dH(a, b) >= 50 && dH(a, b) <= 170; }
-
-  function noterTressage(cols, t) {
-    const R = [];
+  // Note un trio (ou duo) dans une ambiance. Renvoie null si l'harmonie ne tient pas.
+  function noter(cols, theme, t) {
+    for (let i = 0; i < cols.length; i++) for (let j = i + 1; j < cols.length; j++) if (dE(cols[i], cols[j]) < 0.07) return null;
+    const [d, e, a] = cols;
+    if (dL(d, e) < t.lisible) return null;                       // le motif disparaîtrait
+    let sc = 70;
+    // Contraste souhaité par l'ambiance
+    const [lo, hi] = theme.contraste, ec = dL(d, e);
+    if (ec < lo) sc -= (lo - ec) * 90; else if (ec > hi) sc -= (ec - hi) * 60; else sc += 8;
     for (let i = 0; i < cols.length; i++) for (let j = i + 1; j < cols.length; j++) {
-      if (dE(cols[i], cols[j]) < CONFIG.ecartMin) return { score: 0, rejet: true, raisons: [{ ok: false, t: 'Deux couleurs trop proches : le motif disparaît.' }] };
+      const x = cols[i], y = cols[j];
+      // deux couleurs vives de même clarté et de teintes éloignées : ça vibre
+      if (x.C > 0.1 && y.C > 0.1 && dL(x, y) < 0.1 && dH(x, y) >= 50) sc -= theme.osé ? 8 : 25;
+      // teintes qui se battent (ni proches, ni opposées) entre deux couleurs franches
+      else if (x.C > 0.09 && y.C > 0.09 && dH(x, y) > 50 && dH(x, y) < 140) sc -= theme.osé ? 2 : 10;
     }
-    const [d, s, a] = cols;
-    let sc = 55;
-
-    // 1. Contraste de clarté adapté au tressage (idéal au centre de la plage)
-    const ecart = dL(d, s), [lo, hi] = t.contraste;
-    if (ecart < lo) { sc -= (lo - ecart) * 220; R.push({ ok: false, t: `Contraste trop faible pour un ${t.label.toLowerCase()} : le motif se lit mal.` }); }
-    else if (ecart > hi) { sc -= (ecart - hi) * 120; R.push({ ok: false, t: `Contraste un peu dur pour un ${t.label.toLowerCase()}.` }); }
-    else {
-      const mid = (lo + hi) / 2, demi = (hi - lo) / 2;
-      sc += 6 + 6 * (1 - Math.abs(ecart - mid) / demi);
-      R.push({ ok: true, t: 'Contraste juste pour ce tressage.' });
-    }
-
-    // 1b. Structure de valeurs : clair, moyen, foncé bien étagés
-    if (!a) sc += 8; // compense l'absence d'accent pour comparer 2 et 3 couleurs
+    // Budget de couleurs vives
+    const vifs = cols.filter(c => c.vif).length;
+    if (vifs > theme.vifs) sc -= (vifs - theme.vifs) * 14;
+    // L'accent doit se voir
     if (a) {
-      const Ls = cols.map(c => c.L), span = Math.max(...Ls) - Math.min(...Ls);
-      if (span >= 0.3 && span <= 0.65) sc += 4;
+      const vu = Math.min(dE(a, d), dE(a, e));
+      if (vu < 0.1) sc -= 12; else sc += Math.min(8, vu * 30);
     }
-
-    // 1c. Nombre de teintes : deux familles maximum, sinon ça s'éparpille
-    const chrom = cols.filter(c => !c.appui && c.C >= 0.045);
-    const groupes = [];
-    chrom.forEach(c => { const g = groupes.find(g => dH(g, c) <= 35); if (!g) groupes.push(c); });
-    if (groupes.length >= 3) { sc -= 10; R.push({ ok: false, t: 'Trop de teintes différentes.' }); }
-
-    // 1d. Une couleur héroïne plutôt que plusieurs qui crient
-    const heroines = cols.filter(c => c.C >= 0.11).length;
-    if (heroines === 1) sc += 4;
-    if (d.C >= 0.17 && !s.appui) sc -= 4;
-
-    // 2. Budget de couleurs vives
-    const vifs = cols.filter(c => c.C >= 0.13);
-    if (vifs.length >= 2) {
-      let proches = true;
-      for (let i = 0; i < vifs.length; i++) for (let j = i + 1; j < vifs.length; j++) if (dH(vifs[i], vifs[j]) > 35) proches = false;
-      if (!proches) { sc -= 20; R.push({ ok: false, t: 'Trop de couleurs vives qui se disputent.' }); }
-    }
-
-    // 3. Vibration
-    for (let i = 0; i < cols.length; i++) for (let j = i + 1; j < cols.length; j++) {
-      if (vibre(cols[i], cols[j])) { sc -= 22; R.push({ ok: false, t: `${cap(bas(cols[i]))} et ${bas(cols[j])} vibrent entre elles.` }); }
-    }
-
-    // 4. Relations de teinte
-    const rel = relation(d, s);
-    sc += rel.pts;
-    if (a) sc += (relation(d, a).pts + relation(s, a).pts) / 2;
-
-    // 5. Couleur d'appui
-    const tousAnalogues = cols.every(c => c.appui || dH(c, d) <= 35);
-    if (!cols.some(c => c.appui) && !tousAnalogues) { sc -= 8; R.push({ ok: false, t: "Aucune couleur d'équilibre pour poser l'ensemble." }); }
-
-    // 6. Visibilité de l'accent
-    if (a) {
-      if (Math.min(dE(a, d), dE(a, s)) < 0.10) { sc -= 6; R.push({ ok: false, t: "L'accent se voit peu." }); }
-      else if (a.C >= 0.10 || dL(a, d) >= 0.25) sc += 4;
-    }
-
-    // 7. Mélange optique vu de loin
-    const mix = melange(cols, t.couverture);
-    const cMoy = cols.reduce((acc, c, i) => acc + c.C * (t.couverture[i] || 0), 0);
-    if (cMoy > 0.07 && mix.C < 0.4 * cMoy && mix.L > 0.3 && mix.L < 0.72) { sc -= 16; R.push({ ok: false, t: 'Vu de loin, le mélange devient terne.' }); }
-
-    // 7b. Retenue : un ensemble trop saturé fatigue sur une terrasse entière
-    if (cMoy > 0.13) { sc -= (cMoy - 0.13) * 120; R.push({ ok: false, t: 'Ensemble très saturé.' }); }
-
-    // 8. Structure bois
-    if (dE(d, BOIS) < 0.06) { sc -= 10; R.push({ ok: false, t: 'La dominante se confond avec la structure bois.' }); }
-
-    // 9. Ensemble trop fade
-    if (cols.every(c => c.C < 0.045) && ecart < 0.3) { sc -= 5; R.push({ ok: false, t: 'Ensemble un peu fade.' }); }
-
-    return { score: Math.max(0, Math.min(100, Math.round(sc))), raisons: R, mix, relation: rel.type };
+    // La dominante ne doit pas se confondre avec la structure en bois
+    if (dE(d, BOIS) < 0.06) sc -= 10;
+    return { score: sc };
   }
 
-  /* ================= Contours ================= */
-
-  // ids réels de la palette du configurateur (anthracite et greige : prévus pour le prochain nuancier)
-  const CLASSIQUES = ['blanc', 'noir', 'ecru', 'ivoire', 'gris', 'anthracite', 'greige'];
-  const STYLES_CONTOUR = { 'ton-sur-ton': 'Ton sur ton', echo: 'Écho du tressage', neutre: 'Neutre', accent: 'Signature' };
-
-  function noterContour(cols, c, mix) {
-    const d = cols[0];
-    let sc = 70, style;
-    const idx = cols.findIndex(x => x.id === c.id);
-    if (idx === 0) { style = 'ton-sur-ton'; sc += 6; }
-    else if (idx > 0) { style = 'echo'; sc += 14; }
-    else if (c.appui || c.metallise || c.id === 'naturel') {
-      style = 'neutre'; sc += 6 + (CLASSIQUES.includes(c.id) ? 4 : 0);
-      // cohérence de température entre le contour neutre et le tressage
-      const neutreChaud = !c.metallise && c.C >= 0.02 && c.H >= 40 && c.H <= 110;
-      const neutreFroid = !c.metallise && c.C >= 0.015 && c.H >= 180 && c.H <= 300;
-      const tressageFroid = mix.C >= 0.035 && mix.H >= 150 && mix.H <= 300;
-      const tressageChaud = mix.C >= 0.035 && (mix.H < 110 || mix.H > 330);
-      if (neutreChaud && tressageFroid) sc -= 6;
-      if (neutreFroid && tressageChaud) sc -= 4;
-    }
-    else {
-      style = 'accent'; sc -= 10;
-      if (cols.some(x => x.C >= 0.045 && dH(x, c) <= 25)) sc += 8;
-      if (c.C >= 0.13 && cols.some(x => x.C >= 0.13 && dH(x, c) > 35)) sc -= 15;
-    }
-    const lisible = Math.abs(c.L - mix.L);
-    let note = '';
-    if (style !== 'ton-sur-ton') {
-      if (lisible < 0.10) { sc -= 18; note = 'Le contour se perd dans le tressage.'; }
-      else if (lisible >= 0.25) { sc += 8; note = "Le contour dessine l'assise."; }
-    }
-    if (vibre(c, d)) sc -= 15;
-    // le contour touche la structure bois : il doit s'en détacher
-    const ecartBois = dE(c, BOIS);
-    if (ecartBois < 0.12) sc -= Math.round((0.12 - ecartBois) * 100);
-    return { id: c.id, nom: c.nom, hex: c.hex, style, styleLabel: STYLES_CONTOUR[style], score: Math.max(0, Math.min(100, Math.round(sc))), note };
-  }
-
-  // Classe les contours possibles, en variant les styles
-  function contoursPour(cols, t, n, styleVoulu) {
-    cols = cols.map(couleur).filter(Boolean);
-    t = typeof t === 'string' ? tressage(t) : t;
-    const mix = melange(cols, t.couverture);
-    const tous = PALETTE.filter(c => c.roles.includes('contour')).map(c => noterContour(cols, c, mix)).sort((x, y) => y.score - x.score);
-    const choix = [];
-    if (styleVoulu && styleVoulu !== 'auto') { const p = tous.find(x => x.style === norm(styleVoulu)); if (p) choix.push(p); }
-    for (const c of tous) { if (choix.length >= (n || 3)) break; if (!choix.some(x => x.style === c.style)) choix.push(c); }
-    for (const c of tous) { if (choix.length >= (n || 3)) break; if (!choix.includes(c)) choix.push(c); }
-    return choix;
+  // Contours : tirés de l'ambiance, notés selon le bois et le tressage
+  function contoursPour(cols, theme, n) {
+    const res = ids(theme.contour).map(c => {
+      let sc = 60, style;
+      if (cols.some(x => x.id === c.id)) { style = 'echo'; sc += 10; }
+      else if (c.neutre || c.L > 0.88) { style = 'neutre'; sc += 6; }
+      else style = 'signature';
+      if (dE(c, BOIS) < 0.08) sc -= 20;                           // se perd sur le bois
+      sc += Math.min(10, dE(c, cols[0]) * 20);                     // se détache de la dominante
+      return { id: c.id, nom: c.nom, hex: c.hex, style, styleLabel: STYLE_LABEL[style], score: Math.round(sc) };
+    }).sort((x, y) => y.score - x.score);
+    return res.slice(0, n || 3);
   }
 
   /* ================= Génération ================= */
 
-  function pool(role) { return PALETTE.filter(c => c.roles.includes(role)); }
+  function cleDe(x) { return x.cols.map(c => c.id).join('+'); }
 
-  function generer(t, fam, verrous, o) {
-    const pools = t.slots.map((slot, i) => verrous[slot] ? [couleur(verrous[slot])].filter(Boolean) : pool(ROLES[i] || 'accent'));
-    const contourFixe = verrous.contour ? couleur(verrous.contour) : null;
-    const seuil = o.seuil !== undefined ? o.seuil : CONFIG.seuil;
-    const brut = [];
-    const essayer = cols => {
-      if (!fam.test(cols)) return;
-      const r = noterTressage(cols, t);
-      if (r.rejet || r.score < seuil - 10) return;
-      const rec = recettePour(cols, t);
-      brut.push({ cols, r, rec, base: Math.min(100, r.score + (rec ? 5 : 0)) });
+  function candidatsTheme(themeId, t) {
+    const th = THEMES[themeId];
+    const D = ids(th.dom), E = ids(th.eq), A = ids(th.acc);
+    const out = [];
+    const ajouter = (cols, sig) => {
+      const r = noter(cols, th, t);
+      if (!r) return;
+      out.push({ cols, theme: themeId, score: r.score + (sig !== undefined ? 14 : 0), signature: sig !== undefined, sigContour: sig || null });
     };
+    // Harmonies signatures d'abord
+    (th.signatures || []).forEach(s => {
+      const c = ids(s.slice(0, t.slots.length));
+      if (c.length === t.slots.length) ajouter(c, couleur(s[3]) ? s[3] : null);
+    });
     if (t.slots.length === 2) {
-      for (const d of pools[0]) for (const s of pools[1]) if (s.id !== d.id) essayer([d, s]);
+      const seconds = E.concat(A.filter(x => !E.includes(x)));
+      for (const d of D) for (const e of seconds) if (d.id !== e.id) ajouter([d, e]);
     } else {
-      for (const d of pools[0]) for (const s of pools[1]) {
-        if (s.id === d.id || dE(d, s) < CONFIG.ecartMin) continue;
-        if (t.contraste[0] - dL(d, s) > 0.15) continue; // contraste trop faible, inutile d'aller plus loin
-        for (const a of pools[2]) if (a.id !== d.id && a.id !== s.id) essayer([d, s, a]);
-      }
+      for (const d of D) for (const e of E) for (const a of A) if (d.id !== e.id && a.id !== d.id && a.id !== e.id) ajouter([d, e, a]);
     }
-    brut.sort((x, y) => y.base - x.base);
-    // Variété : au plus 10 alliances par dominante et 3 par paire dominante / équilibre,
-    // sinon quelques couleurs très bien notées occupent toute la liste
-    const parDom = {}, parPaire = {}, top = [];
-    for (const x of brut) {
-      const d = x.cols[0].id, p = d + '+' + x.cols[1].id;
-      if ((parDom[d] || 0) >= 10 || (parPaire[p] || 0) >= 3) continue;
-      parDom[d] = (parDom[d] || 0) + 1; parPaire[p] = (parPaire[p] || 0) + 1;
-      top.push(x);
-      if (top.length >= 400) break;
-    }
-    const pc = CONFIG.poidsContour;
-    return top.map(x => {
-      let contour, alternatives;
-      if (contourFixe) {
-        contour = noterContour(x.cols, contourFixe, x.r.mix);
-        alternatives = [contour];
-      } else {
-        alternatives = contoursPour(x.cols, t, 3, o.styleContour);
-        contour = alternatives[0];
-      }
-      return Object.assign(x, { contour, alternatives, total: Math.round(x.base * (1 - pc) + contour.score * pc) });
-    }).filter(x => x.total >= seuil);
+    // une même combinaison peut venir d'une signature et de la génération : on garde la meilleure
+    const vu = new Map();
+    out.forEach(x => { const k = cleDe(x); if (!vu.has(k) || vu.get(k).score < x.score) vu.set(k, x); });
+    return [...vu.values()];
   }
-
-  /* ================= Sélection variée ================= */
 
   function rngDe(graine) {
     if (graine === undefined || graine === null) return Math.random;
-    let h = typeof graine === 'number' ? graine : [...String(graine)].reduce((a, ch) => (a * 31 + ch.charCodeAt(0)) | 0, 7);
-    return function () { h |= 0; h = (h + 0x6D2B79F5) | 0; let t = Math.imul(h ^ (h >>> 15), 1 | h); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    let h = hash(graine);
+    return function () { h |= 0; h = (h + 0x6D2B79F5) | 0; let q = Math.imul(h ^ (h >>> 15), 1 | h); q = (q + Math.imul(q ^ (q >>> 7), 61 | q)) ^ q; return ((q ^ (q >>> 14)) >>> 0) / 4294967296; };
   }
 
+  // Sélection variée : bonne note, mais jamais deux fois la même idée
   function selectionner(cands, n, rng, alea, exclure) {
     const ex = new Set(exclure || []);
-    // Couleurs déjà montrées aux tours précédents (bouton « autres idées ») : on les fait tourner
     const domVu = {}, colVu = {};
-    (exclure || []).forEach(k => { const ids = String(k).split('+'); domVu[ids[0]] = (domVu[ids[0]] || 0) + 1; ids.forEach(id => { colVu[id] = (colVu[id] || 0) + 1; }); });
-    const reste = cands.filter(c => !ex.has(cleDe(c))).sort((a, b) => b.total - a.total).slice(0, 300);
+    (exclure || []).forEach(k => { const l = String(k).split('+'); domVu[l[0]] = (domVu[l[0]] || 0) + 1; l.forEach(i => { colVu[i] = (colVu[i] || 0) + 1; }); });
+    const reste = cands.filter(c => !ex.has(cleDe(c)));
     const pris = [];
     while (pris.length < n && reste.length) {
       let best = -1e9, bi = 0;
       reste.forEach((c, i) => {
-        let v = c.total + (rng() - 0.5) * 2 * alea;
-        v -= 9 * (domVu[c.cols[0].id] || 0);
-        c.cols.slice(1).forEach(x => { v -= 2.5 * (colVu[x.id] || 0); });
+        let v = c.score + (rng() - 0.5) * 2 * alea;
+        v -= 8 * (domVu[c.cols[0].id] || 0);
+        c.cols.slice(1).forEach(x => { v -= 2 * (colVu[x.id] || 0); });
         for (const p of pris) {
           if (p.cols[0].id === c.cols[0].id) v -= 30;
-          const ids = new Set(p.cols.map(x => x.id));
-          const communes = c.cols.filter(x => ids.has(x.id)).length;
-          v -= communes * 8;
-          if (communes === c.cols.length) v -= 60;
-          if (dE(p.r.mix, c.r.mix) < 0.05) v -= 18;
-          if (p.rec && c.rec && p.rec.id === c.rec.id) v -= 10;
-          if (p.contour.id === c.contour.id) v -= 6;
+          const s = new Set(p.cols.map(x => x.id));
+          v -= c.cols.filter(x => s.has(x.id)).length * 9;
+          if (p.theme === c.theme) v -= 6;
         }
         if (v > best) { best = v; bi = i; }
       });
@@ -430,225 +356,104 @@
     return pris;
   }
 
-  /* ================= Mise en forme ================= */
-
-  function cleDe(x) { return x.cols.map(c => c.id).join('+'); }
-
-  function hash(s) { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) | 0; return Math.abs(h); }
-
-  // Noms d'alliance évocateurs, choisis selon la recette, puis la couleur dominante
-  const NOMS = {
-    terrasse: ['Grand café', 'Terrasse parisienne', 'Boulevard', 'Café du matin'],
-    graphique: ['Signature', 'Contraste net', 'Trait d\'encre', 'Graphique'],
-    bistrot: ['Comptoir', 'Zinc', 'Bistrot du coin', 'Apéritif'],
-    camaieu: ['Velours', 'Ton sur ton', 'Camaïeu', 'Douceur'],
-    'naturel-accent': ['Paillote', 'Été indien', 'Bord de mer', 'Sieste au soleil'],
-    profond: ['Bar à vin', 'Soirée', 'Feutré', 'Club'],
-    pastel: ['Riviera', 'Dragée', 'Glacier', 'Cabine de plage'],
-    complementaire: ['Contrepoint', 'Duo audacieux', 'Face à face', 'Coup d\'éclat']
-  };
-  const NOMS_LIBRES = {
-    clair: ['Lumière', 'Matin d\'été', 'Brise', 'Plein soleil'],
-    sombre: ['Velours', 'Nuit d\'été', 'Élégance', 'Fin de soirée'],
-    vif: ['Éclat', 'Fête', 'Fanfare', 'Pop'],
-    doux: ['Équilibre', 'Harmonie', 'Promenade', 'Dimanche']
-  };
-  const pick = (liste, cle) => liste[hash(cle) % liste.length];
-
-  function nomAlliance(cols, rec) {
-    const d = cols[0], cle = cleDe({ cols });
-    const liste = rec && NOMS[rec.id] ? NOMS[rec.id]
-      : d.L >= 0.8 ? NOMS_LIBRES.clair : d.L <= 0.5 ? NOMS_LIBRES.sombre : d.C >= 0.13 ? NOMS_LIBRES.vif : NOMS_LIBRES.doux;
-    return pick(liste, cle) + ' · ' + cap(d.nom || d.nomCourt);
+  // Pas deux fois le même nom d'alliance dans un même lot
+  function nomLibre(noms, cle, pris) {
+    let i = hash(cle) % noms.length;
+    for (let k = 0; k < noms.length && pris && pris.has(noms[i]); k++) i = (i + 1) % noms.length;
+    if (pris) pris.add(noms[i]);
+    return noms[i];
   }
 
-  // Phrases courtes, plusieurs tournures par recette pour éviter la répétition
-  const PHRASES = {
-    terrasse: [
-      (d, s) => `${cap(le(d))} et ${le(s)}, le duo des terrasses parisiennes. Indémodable.`,
-      (d, s) => `Le contraste ${du(d)} et ${du(s)} : on se croirait boulevard Saint-Germain.`,
-      (d, s) => `${cap(bas(d))} et ${bas(s)}, un classique qui ne se démode jamais.`
-    ],
-    graphique: [
-      (d, s) => `${cap(le(d))} face à ${le(s)} : le motif saute aux yeux, même de loin.`,
-      (d, s) => `Un contraste franc entre ${le(d)} et ${le(s)}. Le tressage devient signature.`,
-      (d, s) => `${cap(bas(d))} et ${bas(s)}, net et graphique. Parfait pour être remarqué.`
-    ],
-    bistrot: [
-      (d, s) => `${cap(le(d))} donne le ton, ${le(s)} l'adoucit. L'esprit bistrot, en plus frais.`,
-      (d, s) => `Du caractère avec ${le(d)}, de la légèreté avec ${le(s)}.`,
-      (d, s) => `${cap(bas(d))} pour le caractère, ${bas(s)} pour la lumière : joyeux sans en faire trop.`
-    ],
-    camaieu: [
-      (d, s) => `${cap(le(d))} et ${le(s)} se répondent tout en nuance. Un rendu velouté.`,
-      (d, s) => `Un camaïeu ${de(d)} et ${de(s)}, doux et très chic.`,
-      (d, s) => `Ton sur ton entre ${le(d)} et ${le(s)} : élégant, sans effort.`
-    ],
-    'naturel-accent': [
-      (d, s, a) => `Une base ${bas(d)} toute naturelle, réveillée par ${du(a || s)}. Un air de vacances.`,
-      (d, s, a) => `${cap(le(d))} pour la douceur, ${le(a || s)} pour le pep's.`,
-      (d, s, a) => `L'esprit plage : ${bas(d)} en fond, ${bas(a || s)} en éclat.`
-    ],
-    profond: [
-      (d, s) => `${cap(le(d))} et ${le(s)}, une ambiance feutrée de fin de soirée.`,
-      (d, s) => `Des tons profonds, ${bas(d)} et ${bas(s)}. Chic et enveloppant.`,
-      (d, s) => `${cap(bas(d))} et ${bas(s)} : parfait pour un bar à vin ou une salle tamisée.`
-    ],
-    pastel: [
-      (d, s) => `${cap(le(d))} tout en douceur, avec ${le(s)} pour la lumière. Un parfum de Riviera.`,
-      (d, s) => `Doux et solaire : ${bas(d)} et ${bas(s)}, comme une glace en terrasse.`,
-      (d, s) => `${cap(bas(d))} et ${bas(s)}, frais du matin au soir.`
-    ],
-    complementaire: [
-      (d, s) => `${cap(le(d))} et ${le(s)} : deux opposés qui s'entendent bien.`,
-      (d, s) => `Un duo audacieux, ${bas(d)} et ${bas(s)}, adouci juste ce qu'il faut.`,
-      (d, s) => `${cap(bas(d))} et ${bas(s)} en contrepoint. Osé, mais maîtrisé.`
-    ]
-  };
-  const PHRASES_LIBRES = {
-    neutre: [(d, s) => `${cap(le(d))} en vedette, ${le(s)} pour l'équilibre. Simple et juste.`, (d, s) => `${cap(bas(d))} en vedette, ${bas(s)} en appui discret.`],
-    analogue: [(d, s) => `${cap(le(d))} et ${le(s)}, de la même famille : tout se tient.`, (d, s) => `${cap(bas(d))} et ${bas(s)} glissent l'un vers l'autre, en douceur.`],
-    'complementaire-doux': [(d, s) => `${cap(le(d))}, avec ${le(s)} en contrepoint doux.`],
-    autre: [(d, s) => `${cap(le(d))} avec ${le(s)}, tout simplement.`, (d, s) => `${cap(bas(d))} et ${bas(s)}, un accord simple.`]
-  };
-  const ACCENTS = [
-    a => `Une pointe ${de(a)} fait vibrer le motif.`,
-    a => `${cap(le(a))} en touche, pour le rythme.`,
-    a => `Et une note ${de(a)} qui attire l'œil.`
-  ];
-  const CONTOURS = {
-    echo: [c => `Contour ${bas(c)}, repris du tressage.`, c => `Le contour reprend ${le(c)}, tout est relié.`],
-    neutre: [c => `Contour ${bas(c)} pour encadrer l'assise.`, c => `Un contour ${bas(c)}, sobre, qui met le motif en valeur.`],
-    'ton-sur-ton': [() => 'Contour ton sur ton, presque invisible.', () => 'Contour ton sur ton, tout en discrétion.'],
-    accent: [c => `Contour ${bas(c)} en signature.`, c => `Et un contour ${bas(c)} pour signer l'ensemble.`]
-  };
-
-  function pourquoi(cols, rec, relationType, contour) {
-    const [d, s, a] = cols, cle = cleDe({ cols });
-    let p;
-    if (rec && PHRASES[rec.id]) p = pick(PHRASES[rec.id], cle)(d, s, a);
-    else p = pick(PHRASES_LIBRES[relationType] || PHRASES_LIBRES.autre, cle)(d, s, a);
-    if (a && !(rec && rec.id === 'naturel-accent')) p += ' ' + pick(ACCENTS, cle + 'a')(a);
-    if (contour) {
-      const c = couleur(contour.id);
-      const liste = CONTOURS[contour.style] || CONTOURS.accent;
-      p += ' ' + pick(liste, cle + 'c')(c);
+  function finaliser(x, t, nomsPris) {
+    const th = THEMES[x.theme];
+    const [d, e, a] = x.cols;
+    let alternatives = contoursPour(x.cols, th, 3);
+    if (x.sigContour) {
+      const c = couleur(x.sigContour);
+      const deja = alternatives.find(y => y.id === c.id);
+      const sig = deja || { id: c.id, nom: c.nom, hex: c.hex, style: x.cols.some(y => y.id === c.id) ? 'echo' : (c.neutre || c.L > 0.88 ? 'neutre' : 'signature'), score: 80 };
+      sig.styleLabel = STYLE_LABEL[sig.style];
+      alternatives = [sig].concat(alternatives.filter(y => y.id !== c.id)).slice(0, 3);
     }
-    return p;
-  }
-
-  function finaliser(x, t) {
+    const contour = alternatives[0];
     const couleurs = {}, slots = {};
     t.slots.forEach((slot, i) => { couleurs[slot] = x.cols[i].id; slots[slot] = x.cols[i].hex; });
-    // Cases en écho : la 4e couleur du tressage reprend un rôle déjà noté (ex. grille Maille = dominante)
     Object.keys(t.echo || {}).forEach(slot => { couleurs[slot] = couleurs[t.echo[slot]]; slots[slot] = slots[t.echo[slot]]; });
-    slots[CONFIG.contourSlot] = x.contour.hex;
+    slots[CONFIG.contourSlot] = contour.hex;
+    const cle = cleDe(x);
+    let pourquoi = pick(th.phrases, cle)(d, e);
+    if (a) pourquoi += ' ' + pick(ACCENTS, cle + 'a')(a);
+    pourquoi += ' ' + pick(CONTOURS[contour.style] || CONTOURS.signature, cle + 'c')(couleur(contour.id));
     return {
-      id: t.id + ':' + cleDe(x) + ':' + x.contour.id,
-      cle: cleDe(x),
-      nom: nomAlliance(x.cols, x.rec),
+      id: t.id + ':' + cle + ':' + contour.id,
+      cle,
+      nom: nomLibre(th.noms, cle, nomsPris) + ' · ' + cap(d.nom || d.nomCourt),
+      ambiance: th.label,
+      theme: x.theme,
+      signature: x.signature,
       tressage: t.id,
       couleurs,
-      contour: x.contour.id,
+      contour: contour.id,
       slots,
-      score: Math.min(100, x.note !== undefined ? x.note : x.total),
-      valide: !!x.valide,
-      scoreTressage: x.r.score,
-      scoreContour: x.contour.score,
-      recette: x.rec ? x.rec.id : null,
-      recetteLabel: x.rec ? x.rec.label : null,
-      familles: famillesDe(x.cols),
-      pourquoi: pourquoi(x.cols, x.rec, x.r.relation, x.contour),
-      raisons: x.r.raisons,
-      contoursAlternatifs: x.alternatives.map(c => ({ id: c.id, nom: c.nom, hex: c.hex, style: c.style, styleLabel: c.styleLabel, score: c.score })),
-      melangeHex: x.r.mix.hex
+      score: Math.max(0, Math.min(100, Math.round(x.score))),
+      pourquoi,
+      contoursAlternatifs: alternatives
     };
   }
 
   /* ================= API publique ================= */
 
-  function depuisValides(t, fam, verrous) {
-    if (!VALIDES) return [];
-    return VALIDES.filter(v => v.tressage === t.id).map(v => {
-      const cols = t.slots.map(s => couleur(v.couleurs[s]));
-      if (cols.some(c => !c)) return null;
-      if (!fam.test(cols)) return null;
-      if (t.slots.some(s => verrous[s] && couleur(verrous[s]) && couleur(verrous[s]).id !== v.couleurs[s])) return null;
-      const r = noterTressage(cols, t);
-      const rec = recettePour(cols, t);
-      const contourCol = couleur(verrous.contour || v.contour);
-      const contour = noterContour(cols, contourCol, r.mix);
-      if (verrous.contour && contour.score < CONFIG.seuil) return null;
-      const alternatives = verrous.contour ? [contour] : [contour].concat(contoursPour(cols, t, 3).filter(c => c.id !== contour.id)).slice(0, 3);
-      const note = Math.round(r.score * (1 - CONFIG.poidsContour) + contour.score * CONFIG.poidsContour);
-      // les alliances validées passent devant la génération automatique
-      return { cols, r, rec, contour, alternatives, note, valide: true, total: note + 30 };
-    }).filter(Boolean);
+  function tressage(id) {
+    const k = norm(id);
+    const t = TRESSAGES[k];
+    if (!t) throw new Error('Tressage inconnu : ' + id);
+    return Object.assign({ id: k }, t);
   }
 
   /**
-   * Propose des alliances.
-   * o.tressage      'maille' | 'damier' | 'serge' | 'chevron' | 'natte' | 'bourdon'
-   * o.famille       'aucune' | 'naturels' | 'rouges' | 'verts' | 'bleus' | 'chauds' | 'clairs' | 'profonds'
-   * o.verrous       { c1:'rouge-bordeaux', contour:'noir' } : cases imposées par le client
-   * o.styleContour  'auto' | 'echo' | 'neutre' | 'ton-sur-ton' | 'accent'
-   * o.n             nombre de propositions (6 par défaut)
-   * o.graine        pour des résultats reproductibles
-   * o.alea          dose de hasard (8 par défaut, 0 = toujours les meilleures)
-   * o.exclure       clés déjà montrées (bouton "autres idées")
+   * o.tressage  'maille' | 'damier' | 'natte' | 'serge' | 'chevron' | 'bourdon'
+   * o.famille   identifiant d'ambiance (voir THEMES) ou 'aucune' / 'surprise' pour mélanger
+   * o.n         nombre de propositions (4 par défaut)
+   * o.graine    graine du hasard ; o.alea dose de hasard ; o.exclure clés déjà montrées
    */
   function recommander(o) {
     o = o || {};
     if (!PALETTE.length) throw new Error('Palette non chargée : appeler charger(palette) avant.');
     const t = tressage(o.tressage || 'maille');
-    const fam = famille(o.famille);
-    const verrous = o.verrous || {};
-    const n = o.n || 6;
-    let cands = o.live ? [] : depuisValides(t, fam, verrous);
-    // la liste validée suffit dès qu'elle offre assez de choix, sinon on complète par la génération
-    if (cands.length < n * 2) cands = cands.concat(generer(t, fam, verrous, o));
-    const vus = new Set();
-    cands = cands.filter(c => { const k = cleDe(c) + '|' + c.contour.id; if (vus.has(k)) return false; vus.add(k); return true; });
-    const choix = selectionner(cands, n, rngDe(o.graine), o.alea === undefined ? 8 : o.alea, o.exclure);
-    return choix.map(x => finaliser(x, t));
+    const fam = norm(o.famille || 'aucune');
+    const themes = THEMES[fam] ? [fam] : ORDRE_THEMES;
+    let cands = [];
+    themes.forEach(id => { cands = cands.concat(candidatsTheme(id, t)); });
+    cands.sort((a, b) => b.score - a.score);
+    // Les meilleures, avec au plus 8 idées par dominante et par ambiance pour laisser de la place à toutes
+    const parDom = {}, top = [];
+    for (const c of cands) {
+      const k = c.theme + '|' + c.cols[0].id;
+      if ((parDom[k] || 0) >= 8) continue;
+      parDom[k] = (parDom[k] || 0) + 1; top.push(c);
+      if (top.length >= 500) break;
+    }
+    const choix = selectionner(top, o.n || 4, rngDe(o.graine), o.alea === undefined ? 10 : o.alea, o.exclure);
+    const nomsPris = new Set();
+    return choix.map(x => finaliser(x, t, nomsPris));
   }
 
-  /**
-   * Diagnostic d'une configuration manuelle.
-   * o.tressage, o.couleurs { c1, c2, c3, contour }
-   */
+  // Avis rapide sur une configuration manuelle (dans l'ambiance qui lui va le mieux)
   function diagnostiquer(o) {
     const t = tressage(o.tressage);
     const cols = t.slots.map(s => couleur(o.couleurs[s]));
     if (cols.some(c => !c)) return { score: null, niveau: 'incomplet', conseils: ['Choisis toutes les couleurs du tressage.'] };
-    const r = noterTressage(cols, t);
-    const contourCol = couleur(o.couleurs.contour || o.couleurs[CONFIG.contourSlot]);
-    const contour = contourCol ? noterContour(cols, contourCol, r.mix) : null;
-    const suggestions = contoursPour(cols, t, 3);
-    const total = contour ? Math.round(r.score * (1 - CONFIG.poidsContour) + contour.score * CONFIG.poidsContour) : r.score;
-    const conseils = r.raisons.filter(x => !x.ok).map(x => x.t);
-    if (contour && contour.note && contour.score < 65) conseils.push(contour.note);
-    return {
-      score: total,
-      niveau: total >= 80 ? 'excellent' : total >= 65 ? 'bon' : 'a-revoir',
-      conseils,
-      contour,
-      contoursSuggeres: suggestions,
-      recette: (recettePour(cols, t) || {}).label || null,
-      melangeHex: r.mix.hex
-    };
-  }
-
-  function chargerValides(json) {
-    VALIDES = Array.isArray(json) ? json : (json && json.valides) || null;
-    return VALIDES ? VALIDES.length : 0;
+    let best = null;
+    ORDRE_THEMES.forEach(id => { const r = noter(cols, THEMES[id], t); if (r && (!best || r.score > best.score)) best = { score: r.score, theme: id }; });
+    if (!best) return { score: 40, niveau: 'a-revoir', conseils: ['Deux couleurs sont trop proches : le motif se lit mal.'] };
+    return { score: Math.round(best.score), niveau: best.score >= 80 ? 'excellent' : best.score >= 65 ? 'bon' : 'a-revoir', ambiance: THEMES[best.theme].label, conseils: [] };
   }
 
   return {
-    CONFIG, TRESSAGES, FAMILLES, RECETTES, STYLES_CONTOUR,
-    charger, chargerValides, configurer, couleur,
-    recommander, diagnostiquer, contoursPour,
+    CONFIG, TRESSAGES, THEMES, ORDRE_THEMES,
+    charger, configurer, couleur, recommander, diagnostiquer,
+    contoursPour: (cols, themeId, n) => contoursPour(ids(cols), THEMES[themeId] || THEMES.brasserie, n),
     palette: () => PALETTE.slice(),
-    outils: { analyser, dE, dL, dH, melange, norm }
+    outils: { analyser, dE, dL, dH, noter }
   };
 });

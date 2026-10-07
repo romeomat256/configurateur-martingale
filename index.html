@@ -122,6 +122,8 @@ header{position:fixed;top:0;left:0;right:0;z-index:200;height:var(--hdr);display
 .advisor-card-name{font-size:10px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);}
 .advisor-score{font-size:9px;color:var(--olive);white-space:nowrap;}
 .advisor-swatch-row{display:flex;gap:5px;align-items:center;}
+.advisor-swatch.small{width:14px;height:14px;}
+.advisor-swatch-sep{font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-low);margin:0 2px 0 8px;}
 .advisor-swatch{width:18px;height:18px;border-radius:50%;border:1px solid rgba(0,0,0,.12);box-shadow:inset 0 0 0 1px rgba(255,255,255,.18);}
 .advisor-recall{display:flex;align-items:center;gap:5px;margin-top:9px;flex-wrap:wrap;}
 .advisor-recall-label{font-size:8px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-low);margin-right:2px;}
@@ -410,9 +412,9 @@ button.acc-header{width:100%;border:0;background:transparent;text-align:left;fon
         </div>
       </div>
       <div class="advisor-panel" id="advisor-panel">
-        <div class="advisor-sub">Nuance</div>
+        <div class="advisor-sub">Ambiance</div>
         <div class="advisor-nuances" id="advisor-nuances"></div>
-        <button class="advisor-action" onclick="proposeAdvisorHarmony()">Proposer une harmonie</button>
+        <button class="advisor-action" id="advisor-action" onclick="proposeAdvisorHarmony()">Proposer des harmonies</button>
         <div class="advisor-result" id="advisor-result"></div>
       </div>
 
@@ -1096,16 +1098,16 @@ var advisorShownKeys = [];
 var advisorEngineReady = false;
 
 const ADVISOR_NUANCES=[
-  {id:'aucune',name:'Aucune'},
-  {id:'naturels',name:'Naturels'},
-  {id:'rouges',name:'Rouges'},
-  {id:'verts',name:'Verts'},
-  {id:'bleus',name:'Bleus'},
-  {id:'chauds',name:'Chauds'},
-  {id:'clairs',name:'Clairs'},
-  {id:'profonds',name:'Profonds'},
+  {id:'aucune',name:'Surprise'},
+  {id:'brasserie',name:'Brasserie parisienne'},
+  {id:'riviera',name:'Riviera'},
+  {id:'cotebasque',name:'Côte basque'},
+  {id:'barvin',name:'Bar à vin'},
+  {id:'hotelchic',name:'Hôtel chic'},
+  {id:'plage',name:'Bord de mer'},
+  {id:'guinguette',name:'Guinguette'},
+  {id:'pop',name:'Pop graphique'},
 ];
-
 const ADVISOR_ENGINE_TRESSAGES={
   maille:  {slots:['c1','c3','c2'],echo:{c5:'c1'},couverture:[0.47,0.29,0.24],contraste:[0.20,0.40]},
   damier:  {slots:['c1','c3','c2'],echo:{c5:'c1'},couverture:[0.50,0.30,0.20],contraste:[0.30,0.65]},
@@ -1155,7 +1157,7 @@ function initAdvisorEngine(){
   advisorEngineReady=true;
   return true;
 }
-function advisorFamilyId(id){return id==='none'?'aucune':(id||'aucune');}
+function advisorFamilyId(id){return ADVISOR_NUANCES.some(function(n){return n.id===id;})?id:'aucune';}
 function advisorColorId(id){
   if(!id)return null;
   if(hasColorId(id))return id;
@@ -1196,9 +1198,11 @@ function advisorAssignmentsForProposal(proposal,contourId){
 }
 
 function advisorContourRecallIds(assignments){
-  return [...new Set(['blanc', ...assignments
+  var proposal=advisorLast&&advisorProposals[advisorLast.proposalIdx];
+  var alt=(proposal&&proposal.contoursAlternatifs||[]).map(function(c){return c.id;});
+  return [...new Set(alt.concat(['blanc'], assignments
     .filter(function(item){return item.key!=='c4';})
-    .map(function(item){return item.colorId;})])]
+    .map(function(item){return item.colorId;})))]
     .filter(function(id){return COLORS.some(function(color){return color.id===id;});});
 }
 function advisorContourRecallHtml(assignments,currentId){
@@ -1212,9 +1216,30 @@ function advisorContourRecallHtml(assignments,currentId){
     }).join('')+
   '</div>';
 }
+function advisorSwatch(id,small){
+  var c=colorById(id);
+  return '<span class="advisor-swatch'+(small?' small':'')+'" title="'+esc(c.name)+'" style="background:'+c.hex+';"></span>';
+}
+function advisorCardsHtml(){
+  if(!advisorProposals.length)return '';
+  var slots=(WEAVE_COLOR_SLOTS[S.weave]||[]).filter(function(slot){return slot.key!=='c4';});
+  return '<div class="advisor-proposals">'+advisorProposals.map(function(p,i){
+    var active=advisorLast&&advisorLast.proposalIdx===i;
+    var seen={};
+    var dots=slots.map(function(slot){var id=p.couleurs&&p.couleurs[slot.key];if(!id||seen[id])return '';seen[id]=1;return advisorSwatch(id);}).join('');
+    var contourId=active?advisorLast.contourId:p.contour;
+    return '<div class="advisor-card'+(active?' active':'')+'">'+
+      '<button type="button" class="advisor-apply" onclick="applyAdvisorProposal('+i+')">'+
+        '<div class="advisor-card-head"><span class="advisor-card-name">'+esc(p.nom)+'</span>'+(S.advisorNuance==='aucune'?'<span class="advisor-score">'+esc(p.ambiance||'')+'</span>':'')+'</div>'+
+        '<div class="advisor-swatch-row">'+dots+'<span class="advisor-swatch-sep">contour</span>'+advisorSwatch(contourId,true)+'</div>'+
+        (active?'<div class="advisor-why">'+esc(p.pourquoi)+'</div>':'')+
+      '</button></div>';
+  }).join('')+'</div>';
+}
 function advisorCurrentHtml(){
-  if(!advisorLast)return '';
-  return '<div class="advisor-current">'+
+  var html=advisorCardsHtml();
+  if(!advisorLast)return html;
+  return html+'<div class="advisor-current">'+
     '<div class="advisor-result-title">Couleur contour</div>'+
     advisorContourRecallHtml(advisorLast.assignments,advisorLast.contourId)+
   '</div>';
@@ -1259,6 +1284,8 @@ function renderAdvisor(){
   }
   result.className='advisor-result visible';
   result.innerHTML=advisorCurrentHtml();
+  var action=document.getElementById('advisor-action');
+  if(action)action.textContent=advisorProposals.length?'Autres idées':'Proposer des harmonies';
 }
 function setColorMode(mode){
   S.colorMode=mode==='advisor'?'advisor':'manual';
@@ -1271,7 +1298,8 @@ function setAdvisorNuance(id){
   advisorLast=null;
   advisorProposals=[];
   advisorShownKeys=[];
-  renderAdvisor();
+  S.advisorSpin=0;
+  proposeAdvisorHarmony();
 }
 function applyAdvisorProposal(idx,contourId,contourIdx){
   var proposal=advisorProposals[idx];
@@ -1279,7 +1307,8 @@ function applyAdvisorProposal(idx,contourId,contourIdx){
   if(contourIdx!==undefined&&proposal.contoursAlternatifs&&proposal.contoursAlternatifs[contourIdx]){
     contourId=proposal.contoursAlternatifs[contourIdx].id;
   }
-  var appliedContourId=advisorColorId(contourId)||'blanc';
+  // Contour : celui choisi, sinon celui proposé par l'harmonie
+  var appliedContourId=advisorColorId(contourId)||advisorColorId(proposal.contour)||'blanc';
   var assignments=advisorAssignmentsForProposal(proposal,appliedContourId);
   assignments.forEach(function(item){
     S[item.key]=item.colorId;
