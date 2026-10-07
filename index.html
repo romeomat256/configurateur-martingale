@@ -412,8 +412,6 @@ button.acc-header{width:100%;border:0;background:transparent;text-align:left;fon
         </div>
       </div>
       <div class="advisor-panel" id="advisor-panel">
-        <div class="advisor-sub">Ambiance</div>
-        <div class="advisor-nuances" id="advisor-nuances"></div>
         <button class="advisor-action" id="advisor-action" onclick="proposeAdvisorHarmony()">Proposer une harmonie</button>
         <div class="advisor-result" id="advisor-result"></div>
       </div>
@@ -1097,8 +1095,9 @@ var advisorProposals = [];
 var advisorShownKeys = [];
 var advisorEngineReady = false;
 
+// Pas de choix d'ambiance à l'écran : le Conseiller pioche les meilleures harmonies de toutes les ambiances
 const ADVISOR_NUANCES=[
-  {id:'aucune',name:'Surprise'},
+  {id:'aucune',name:'Toutes'},
   {id:'brasserie',name:'Brasserie parisienne'},
   {id:'riviera',name:'Riviera'},
   {id:'cotebasque',name:'Côte basque'},
@@ -1157,7 +1156,7 @@ function initAdvisorEngine(){
   advisorEngineReady=true;
   return true;
 }
-function advisorFamilyId(id){return ADVISOR_NUANCES.some(function(n){return n.id===id;})?id:'aucune';}
+function advisorFamilyId(id){return 'aucune';}
 function advisorColorId(id){
   if(!id)return null;
   if(hasColorId(id))return id;
