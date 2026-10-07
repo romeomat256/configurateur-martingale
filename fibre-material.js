@@ -21,9 +21,10 @@ const FIBRE_SETTINGS = {
   // Bourdon : le masque PNG est une bande de 10 rangées, répétée 5 fois en hauteur sur une unité UV
   bourdon:{ weaveType:3, grid:[89,50], maskGrid:[89,10], rough:0.66, relief:0.89, ao:0.51, env:0.35, pairs:1, refUvMm:[457.3,250.1], rawShapes:['tradition'] },
   // Maille : brins dans toutes les directions. Le relief vient de la carte de fibre (fibreMap),
-  // calculée depuis le masque. frontCenter : centre d'une croix, en UV de motif (face avant centrée).
+  // calculée depuis le masque. frontWrap : face avant raccordée à l'assise (prioritaire).
+  // frontCenter : centre d'une croix, en UV de motif (ancien réglage, face avant centrée).
   maille: { weaveType:4, grid:[12.3,12.3], rough:0.86, relief:0.44, ao:0.34, env:1.08, pairs:1, refUvMm:[90.1,87.2], rawShapes:['tradition'],
-            fibreMap:'textures/maille-fibremap.png', frontCenter:[0.2857,0.5823], frontPeriod:[0.5,0.5] },
+            fibreMap:'textures/maille-fibremap.png', frontWrap:true, frontCenter:[0.2857,0.5823], frontPeriod:[0.5,0.5] },
 };
 
 const FIBRE_VERT = `
@@ -464,7 +465,70 @@ const FIBRE_FRAG = `
     return fronts.size;
   }
 
-  global.FibreCalibration = { analyzeIslands, computeUvXform, alignFrontIslands };
+
+  /*
+   * Raccorde la face avant à l'assise : le motif de l'assise passe l'arête et continue vers le bas,
+   * comme un vrai tressage qui tourne autour du cadre. Même échelle et même position horizontale
+   * que l'assise ; verticalement, le motif reprend là où l'assise s'arrête.
+   * S'applique après le calibrage (xf contient déjà la transformation de l'assise).
+   */
+  function wrapFrontIslands(pos, uv, idx, xf){
+    const res = analyzeIslands(pos, uv, idx);
+    const nv = pos.length/3;
+    const seat = res.islands.filter(i=>i.role==='seat').sort((a,b)=>b.area-a.area)[0];
+    const fronts = res.islands.filter(i=>i.role==='front');
+    if(!seat || !fronts.length) return 0;
+    // Moindres carrés : f ≈ c0 + c1*a + c2*b
+    const fit3 = (rows) => {
+      const A=[[0,0,0],[0,0,0],[0,0,0]], B=[0,0,0];
+      for(const [a,b,f] of rows){ const r=[1,a,b]; for(let i=0;i<3;i++){ B[i]+=r[i]*f; for(let j=0;j<3;j++) A[i][j]+=r[i]*r[j]; } }
+      const det=m=>m[0][0]*(m[1][1]*m[2][2]-m[1][2]*m[2][1])-m[0][1]*(m[1][0]*m[2][2]-m[1][2]*m[2][0])+m[0][2]*(m[1][0]*m[2][1]-m[1][1]*m[2][0]);
+      const D=det(A); if(Math.abs(D)<1e-18) return null;
+      return [0,1,2].map(k=>det(A.map((row,i)=>row.map((x,j)=>j===k?B[i]:x)))/D);
+    };
+    const fit2 = (rows) => {
+      let n=0,sa=0,sf=0,saa=0,saf=0;
+      for(const [a,f] of rows){ n++; sa+=a; sf+=f; saa+=a*a; saf+=a*f; }
+      const d=n*saa-sa*sa; if(Math.abs(d)<1e-18) return null;
+      const k=(n*saf-sa*sf)/d; return [(sf-k*sa)/n, k];
+    };
+    const seatRoot = seat.root;
+    const ru=[], rv=[], edgeY=[];
+    const zs = seat.max[2];
+    for(let v=0; v<nv; v++){
+      if(res.vertexIsland(v)!==seatRoot) continue;
+      const x=pos[3*v], y=pos[3*v+1], z=pos[3*v+2];
+      ru.push([x, z, uv[2*v]*xf[4*v] + xf[4*v+2]]);
+      rv.push([x, z, uv[2*v+1]*xf[4*v+1] + xf[4*v+3]]);
+      if(z > zs - 0.015) edgeY.push(y);
+    }
+    const U = fit3(ru), V = fit3(rv);
+    if(!U || !V || !edgeY.length) return 0;
+    const ys = edgeY.reduce((s,y)=>s+y,0)/edgeY.length;
+    let done = 0;
+    for(const f of fronts){
+      const fu=[], fv=[];
+      for(let v=0; v<nv; v++){
+        if(res.vertexIsland(v)!==f.root) continue;
+        fu.push([pos[3*v], uv[2*v]]); fv.push([pos[3*v+1], uv[2*v+1]]);
+      }
+      const P = fit2(fu), Q = fit2(fv);
+      if(!P || !Q || Math.abs(P[1])<1e-9 || Math.abs(Q[1])<1e-9) continue;
+      const zf = f.centre[2], xc = f.centre[0];
+      // Assise au bord avant : u = U0 + U1 x + U2 zs ; v continue en descendant (même pas que l'assise)
+      const SU = U[1]/P[1], OU = U[0] + U[2]*zs - SU*P[0];
+      const C  = V[0] + V[1]*xc + V[2]*zs + V[2]*Math.max(0, zf - zs) + V[2]*ys;
+      const SV = -V[2]/Q[1], OV = C - SV*Q[0];
+      for(let v=0; v<nv; v++){
+        if(res.vertexIsland(v)!==f.root) continue;
+        xf[4*v]=SU; xf[4*v+1]=SV; xf[4*v+2]=OU; xf[4*v+3]=OV;
+      }
+      done++;
+    }
+    return done;
+  }
+
+  global.FibreCalibration = { analyzeIslands, computeUvXform, alignFrontIslands, wrapFrontIslands };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 // Îlots de la chaise de référence (Tradition), mesurés une fois : rôle, échelle, sens, ancrage du motif.
@@ -543,7 +607,9 @@ function prepareFibreGeometry(mesh, root, weaveId, shapeId){
       xf = res.xform;
     }
     // Face avant : frise centrée sur une rangée de motifs (toutes chaises, référence comprise)
-    if(cfg.frontCenter) FibreCalibration.alignFrontIslands(pos, uv, I ? I.array : null, xf, cfg.frontCenter, cfg.frontPeriod || [0.5,0.5]);
+    // Face avant raccordée à l'assise (le motif passe l'arête), sinon centrée sur une rangée de motifs
+    if(cfg.frontWrap) FibreCalibration.wrapFrontIslands(pos, uv, I ? I.array : null, xf);
+    else if(cfg.frontCenter) FibreCalibration.alignFrontIslands(pos, uv, I ? I.array : null, xf, cfg.frontCenter, cfg.frontPeriod || [0.5,0.5]);
   }catch(err){
     console.warn('Calibrage fibre impossible, UV brutes utilisées.', err);
     xf = identity();
