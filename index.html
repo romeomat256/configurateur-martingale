@@ -28,6 +28,7 @@
 <link rel="stylesheet" href="./vendor/fonts.css">
 <script src="./weave-materials.js"></script>
 <script src="./fibre-material.js"></script>
+<script src="./bois-material.js"></script>
 <script src="./analytics.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
@@ -1989,7 +1990,13 @@ function setupGLBScene(obj){
 
     } else if(isStructureMesh(ch)){
       ch.userData.meshRole = 'structure';
-      ch.material = tuneStructureMaterial(ch.material);
+      // Bois validé sur le banc d'essai (teinte par zones, vernis, retouches). Ancien rendu en secours.
+      let boisMat = null;
+      if(typeof hasBoisMaterial === 'function' && hasBoisMaterial(S.shape)){
+        try{ boisMat = makeBoisMat(ch, obj, S.shape); }
+        catch(err){ console.warn('Bois : rendu validé indisponible, ancien rendu utilisé.', err); }
+      }
+      ch.material = boisMat || tuneStructureMaterial(ch.material);
 
     } else {
       const tressageMesh = isTressageMesh(ch);
