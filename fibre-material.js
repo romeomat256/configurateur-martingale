@@ -1,22 +1,35 @@
 /*
  * fibre-material.js
  * Rendu « fibre réelle » : demi-jonc PVC teinté masse, 5 x 1,5 mm, vernis brillant.
- * Validé sur le banc d'essai Sergé (octobre 2026).
- * Le motif vient du masque PNG (rouge = fibre verticale C1, vert = fibre horizontale C2).
- * Le relief, les rainures et les passages sous la fibre croisée sont calculés dans le shader.
+ * Chaque tressage est prévalidé dans le banc d'essai, puis ses réglages sont reportés ici.
+ * Le motif vient du masque PNG (rouge / vert). Relief, rainures et passages sous la fibre
+ * croisée sont calculés dans le shader. Le calibrage par îlot recale le motif sur Tradition.
  */
 
-// Réglages validés par tressage. Un seul endroit à modifier pour ajuster le rendu.
+// Réglages validés par tressage (Romeo, octobre 2026). Un seul endroit à modifier.
+//   weaveType : 0 = couleur = sens du brin (Sergé, Chevron), 1 = Damier (blocs de 4 brins, 4 couleurs),
+//               2 = Natté (blocs de 3 brins : c1 bords horizontaux, c2 bords verticaux, c3 centre),
+//               3 = Bourdon (bandes verticales c1 / c2, grains = courts passages de trame)
+//   grid      : nombre de cases (brins) par tuile du masque
+//   refUvMm   : échelle de référence, mm réels par unité UV sur la chaise de référence
+//   rawShapes : chaises de référence, laissées en UV brutes ; les autres sont recalées dessus
 const FIBRE_SETTINGS = {
-  // refUvMm : échelle de référence = UV brutes de Tradition et Harpe (validé par Romeo).
-  // Les autres structures sont recalées dessus : le motif a la même taille sur toutes les chaises.
-  serge: { grid:[30,16], rough:0.93, relief:0.69, ao:0.32, env:0.65, pairs:1, refUvMm:[190,146.5] },
+  serge:  { weaveType:0, grid:[30,16], rough:0.93, relief:0.69, ao:0.32, env:0.65, pairs:1, refUvMm:[190,146.5], rawShapes:['tradition','harpe'] },
+  damier: { weaveType:1, grid:[10,8],  rough:0.80, relief:0.76, ao:0.72, env:0.53, pairs:1, refUvMm:[51.1,40.4], rawShapes:['tradition'] },
+  chevron:{ weaveType:0, grid:[12,6],  rough:0.72, relief:0.64, ao:0.42, env:1.11, pairs:1, refUvMm:[84.9,37.7], rawShapes:['tradition'] },
+  natte:  { weaveType:2, grid:[8,6],   rough:0.93, relief:0.69, ao:0.32, env:0.65, pairs:1, refUvMm:[40.7,30.7], rawShapes:['tradition'] },
+  // Bourdon : le masque PNG est une bande de 10 rangées, répétée 5 fois en hauteur sur une unité UV
+  bourdon:{ weaveType:3, grid:[89,50], maskGrid:[89,10], rough:0.66, relief:0.89, ao:0.51, env:0.35, pairs:1, refUvMm:[457.3,250.1], rawShapes:['tradition'] },
+  // Maille : brins dans toutes les directions. Le relief vient de la carte de fibre (fibreMap),
+  // calculée depuis le masque. frontCenter : centre d'une croix, en UV de motif (face avant centrée).
+  maille: { weaveType:4, grid:[12.3,12.3], rough:0.86, relief:0.44, ao:0.34, env:1.08, pairs:1, refUvMm:[90.1,87.2], rawShapes:['tradition'],
+            fibreMap:'textures/maille-fibremap.png', frontCenter:[0.2857,0.5823], frontPeriod:[0.5,0.5] },
 };
 
 const FIBRE_VERT = `
-  uniform mat3 uMaskMatrix;
   attribute vec4 aUvXform;   // calibrage par îlot : échelle u, échelle v, décalage u, décalage v
   uniform float uCalib;      // 1 si prepareFibreGeometry() a posé aUvXform sur ce maillage
+  uniform mat3 uMaskMatrix;
   varying vec2 vUv;
   varying vec3 vNormalW;
   varying vec3 vWorldPos;
@@ -31,10 +44,13 @@ const FIBRE_VERT = `
 const FIBRE_FRAG = `
   uniform sampler2D uMask;
   uniform vec2 uGrid;
-  uniform vec3 uC1, uC2;
+  uniform vec3 uC1, uC2, uC3, uC4;
+  uniform float uWeave;    // 0 = couleur = sens (Sergé, Chevron), 1 = Damier, 2 = Natté, 3 = Bourdon, 4 = Maille (carte de fibre)
+  uniform vec2 uMaskGrid;  // cases du masque PNG (différent de uGrid quand le masque se répète, ex. Bourdon x5 en hauteur)
   uniform float uRough, uRelief, uAO, uEnv, uPlain, uPairs;
-  uniform vec3 uKeyDir, uFillDir, uRimDir;
   uniform float uReferenceFlipY;
+  uniform vec3 uKeyDir, uFillDir, uRimDir;
+  uniform sampler2D uFibreMap;   // Maille : carte de fibre
   varying vec2 vUv;
   varying vec3 vNormalW;
   varying vec3 vWorldPos;
@@ -46,9 +62,46 @@ const FIBRE_FRAG = `
   // Lit le masque du motif au centre de chaque case (mêmes coordonnées que le rendu actuel)
   // 1.0 = fibre verticale (famille rouge, C1), 0.0 = fibre horizontale (famille verte, C2)
   float fam(vec2 cell){
-    vec2 c = mod(cell, uGrid);
-    vec3 m = texture2D(uMask, (c + 0.5) / uGrid).rgb;
+    vec2 c = mod(cell, uMaskGrid);
+    vec3 m = texture2D(uMask, (c + 0.5) / uMaskGrid).rgb;
     return step(m.g, m.r);
+  }
+
+  // Sens du brin visible dans la case : 1 = vertical, 0 = horizontal
+  // Sergé : donné par la famille du masque. Damier : blocs de 4 brins, disposition fixe de la tuile 10 x 8.
+  // Natté : brin central des faisceaux (magenta dans le masque)
+  float centre(vec2 cell){
+    vec2 c = mod(cell, uMaskGrid);
+    vec3 m = texture2D(uMask, (c + 0.5) / uMaskGrid).rgb;
+    return step(0.5, m.r) * step(0.5, m.b);
+  }
+
+  float orient(vec2 cell){
+    if(uWeave < 0.5) return fam(cell);
+    if(uWeave > 2.5){
+      // Bourdon : bandes de brins verticaux ; un grain isolé (couleur différente au-dessus et au-dessous)
+      // est un court passage horizontal de la trame par-dessus la chaîne
+      float f = fam(cell), a = fam(cell + vec2(0.0,1.0)), b = fam(cell - vec2(0.0,1.0));
+      return (abs(f-a) > 0.5 && abs(f-b) > 0.5) ? 0.0 : 1.0;
+    }
+    vec2 c = mod(cell, uGrid);
+    if(uWeave > 1.5){
+      // Natté : tuile 8 x 6, faisceaux de 3 brins
+      if(c.y >= 3.0) return c.x >= 5.0 ? 1.0 : 0.0;
+      return (c.x >= 1.0 && c.x < 4.0) ? 1.0 : 0.0;
+    }
+    if(c.y >= 4.0) return (c.x >= 1.0 && c.x < 5.0) ? 1.0 : 0.0;
+    return c.x >= 6.0 ? 1.0 : 0.0;
+  }
+
+  // Couleur d'un brin selon sa famille (1 = extérieur / rouge, 0 = intérieur / vert) et son sens
+  // Natté : C1 = bords horizontaux, C2 = bords verticaux, C3 = brins centraux
+  vec3 strandColor(float isRed, float isV, float isCentre){
+    if(uWeave < 0.5) return mix(uC2, uC1, isV);
+    if(uWeave < 1.5) return isV > 0.5 ? mix(uC1, uC2, isRed) : mix(uC3, uC4, isRed);
+    if(uWeave > 2.5) return mix(uC2, uC1, isRed);
+    if(isCentre > 0.5) return uC3;
+    return isV > 0.5 ? uC2 : uC1;
   }
 
   float ggx(float ndh, float a){
@@ -89,19 +142,67 @@ const FIBRE_FRAG = `
     float ao = 1.0;
     float detail = 1.0;
 
+    if(uPlain < 0.5 && uWeave > 3.5){
+      // ===== Maille : brins dans toutes les directions, lus dans la carte de fibre =====
+      // carte : R,G = direction vers le centre du brin (u, v) ; B = position 0 bord .. 1 centre
+      vec2 refUv = vec2(vUv.x, mix(vUv.y, 1.0 - vUv.y, uReferenceFlipY));
+      vec3 mk = texture2D(uMask, refUv).rgb;
+      vec4 fm = texture2D(uFibreMap, refUv);
+      bool isR = mk.r > 0.5 && mk.g < 0.5 && mk.b < 0.5;
+      bool isG = mk.g > 0.5 && mk.r < 0.5;
+      bool isB = mk.b > 0.5 && mk.r < 0.5 && mk.g < 0.5;
+      bool isM = mk.r > 0.5 && mk.b > 0.5;
+      // C1 croix A, C2 fuseaux, C3 croix B, C4 grille droite
+      base = isR ? uC1 : isG ? uC2 : isB ? uC3 : uC4;
+      float layer = isM ? 1.0 : isG ? 0.6 : 0.0;   // grille et fuseaux passent sous les croix
+
+      vec3 dp1 = dFdx(vWorldPos), dp2 = dFdy(vWorldPos);
+      vec2 du1 = dFdx(refUv), du2 = dFdy(refUv);
+      vec3 dp2p = cross(dp2, N), dp1p = cross(N, dp1);
+      vec3 T = dp2p*du1.x + dp1p*du2.x;
+      vec3 B = dp2p*du1.y + dp1p*du2.y;
+      T -= N*dot(N,T); B -= N*dot(N,B);
+      float lt = length(T), lb = length(B);
+      T = lt > 1e-8 ? T/lt : vec3(0.0);
+      B = lb > 1e-8 ? B/lb : vec3(0.0);
+
+      vec2 fw = fwidth(refUv * uGrid);
+      float foot = max(fw.x, fw.y);
+      detail = 1.0 - smoothstep(0.16, 0.65, foot);
+
+      const float HALF = 2.5;
+      const float HGT = 1.5;
+      const float RAD = (HALF*HALF + HGT*HGT) / (2.0*HGT);
+      float x = clamp(fm.b, 0.0, 1.0);          // 1 au centre du brin
+      float s = 1.0 - x;                        // 0 au centre, 1 au bord
+      vec2 dc = fm.rg*2.0 - 1.0;
+      float dl = length(dc);
+      dc = dl > 0.05 ? dc/dl : vec2(0.0);
+      float slope = clamp(HALF*s/RAD * uRelief, 0.0, 0.9);
+      vec3 tilt = -(T*dc.x + B*dc.y) * slope;   // la normale penche vers l'extérieur du brin
+      vec3 Nd = normalize(N*sqrt(max(1.0 - dot(tilt,tilt), 0.05)) + tilt);
+      Np = normalize(mix(N, Nd, detail));
+
+      float hProf = (sqrt(max(RAD*RAD - HALF*HALF*s*s, 0.0)) - (RAD-HGT)) / HGT;
+      float aoProf = mix(1.0 - uAO*0.6, 1.0, smoothstep(0.0, 0.5, hProf));
+      float aoLayer = 1.0 - uAO*0.28*layer;
+      ao = mix(1.0 - uAO*0.14, aoProf*aoLayer, detail);
+    } else
     if(uPlain < 0.5){
       vec2 refUv = vec2(vUv.x, mix(vUv.y, 1.0 - vUv.y, uReferenceFlipY));
       vec2 g = refUv * uGrid;
       vec2 cell = floor(g);
       vec2 f = fract(g);
-      float isV = step(0.5, fam(cell));
-      base = mix(uC2, uC1, isV);
+      float isV = orient(cell);
+      float isRed = fam(cell);
+      float isCentre = uWeave > 1.5 ? centre(cell) : 0.0;
+      base = strandColor(isRed, isV, isCentre);
 
       float across = mix(f.y, f.x, isV);
       float along  = mix(f.x, f.y, isV);
       vec2 stepAlong = mix(vec2(1.0,0.0), vec2(0.0,1.0), isV);
-      float endPrev = step(0.5, abs(step(0.5,fam(cell - stepAlong)) - isV));
-      float endNext = step(0.5, abs(step(0.5,fam(cell + stepAlong)) - isV));
+      float endPrev = step(0.5, abs(orient(cell - stepAlong) - isV));
+      float endNext = step(0.5, abs(orient(cell + stepAlong) - isV));
 
       // Repère tangent à partir des dérivées écran (pas de tangentes dans le GLB)
       vec3 dp1 = dFdx(vWorldPos), dp2 = dFdy(vWorldPos);
@@ -131,7 +232,7 @@ const FIBRE_FRAG = `
       // Fin jour entre deux cases : on aperçoit la fibre croisée, dans l'ombre, dessous
       float gapEdge = min(across, 1.0 - across);
       float gap = (1.0 - smoothstep(0.0, 0.045, gapEdge)) * detail;
-      vec3 under = mix(uC1, uC2, isV);
+      vec3 under = uWeave > 2.5 ? mix(uC1, uC2, isRed) : strandColor(isRed, 1.0 - isV, 0.0);
       float sAcross = clamp(HALF*x/RAD * uRelief, -0.97, 0.97);
       float hProf = (sqrt(RAD*RAD - HALF*HALF*x*x) - (RAD-HGT)) / HGT;
 
@@ -186,23 +287,6 @@ const FIBRE_FRAG = `
     col = min(col, 0.82) + 0.18*(1.0 - exp(-over/0.18));
     gl_FragColor = vec4(toSRGB(col), 1.0);
   }`;
-
-// Copie du masque dédiée : filtrage au plus proche, sans anisotrope ni mipmaps,
-// pour lire une case exacte (sinon des coutures apparaissent aux raccords d'UV).
-const fibreMaskCache = {};
-function getFibreMaskTexture(uri){
-  if(!fibreMaskCache[uri]){
-    const tex = new THREE.TextureLoader().load(uri, () => { if(typeof requestRender === 'function') requestRender(); });
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-    tex.magFilter = tex.minFilter = THREE.NearestFilter;
-    tex.generateMipmaps = false;
-    tex.anisotropy = 1;
-    fibreMaskCache[uri] = tex;
-  }
-  return fibreMaskCache[uri];
-}
-
-function hasFibreMaterial(weaveId){ return !!FIBRE_SETTINGS[weaveId]; }
 
 /*
  * fibre-calibration.js
@@ -298,25 +382,39 @@ function hasFibreMaterial(weaveId){ return !!FIBRE_SETTINGS[weaveId]; }
     return { islands:out, vertexIsland:(v)=>find(v) };
   }
 
-  // Îlot de référence du même rôle (le plus grand)
+  // Îlot de référence du même rôle (le plus grand).
+  // Face avant absente de la référence (elle fait partie de l'îlot de l'assise, ex. Bourdon sur Tradition) :
+  // on prolonge l'assise. Même ancrage (milieu du bord avant), même sens horizontal,
+  // et le motif continue vers le bas en passant l'arête.
   function refFor(role, reference){
-    return reference.filter(r=>r.role===role).sort((a,b)=>b.area-a.area)[0] || null;
+    const direct = reference.filter(r=>r.role===role).sort((a,b)=>b.area-a.area)[0];
+    if(direct) return direct;
+    if(role === 'front'){
+      const seat = reference.filter(r=>r.role==='seat').sort((a,b)=>b.area-a.area)[0];
+      if(seat){
+        const down = seat.dirV[2] >= 0 ? [0,-1,0] : [0,1,0];
+        return Object.assign({}, seat, { role:'front', dirV: down });
+      }
+    }
+    return null;
   }
 
   /*
    * Calcule la transformation UV de chaque îlot. Retourne un Float32Array (4 valeurs par sommet).
    * reference : îlots de la chaise de référence (ancrage du motif par rôle)
    * refMm     : échelle cible en mm par unité UV (celle de l'assise de référence)
-   * Si l'assise de la chaise est déjà à l'échelle (écart < tolérance), toute la chaise reste en UV brutes.
+   * Si l'assise de la chaise est déjà à l'échelle (écart < tolérance), toute la chaise reste en UV brutes,
+   * sauf si force = true : chaque îlot est alors recalé (échelle et ancrage) même s'il est déjà à l'échelle.
+   * Les chaises de référence d'un tressage (voir FIBRE_SETTINGS.rawShapes) ne passent jamais ici.
    */
-  function computeUvXform(pos, uv, idx, reference, refMm, tolerance){
+  function computeUvXform(pos, uv, idx, reference, refMm, tolerance, force){
     tolerance = tolerance == null ? 0.08 : tolerance;
     const res = analyzeIslands(pos, uv, idx);
     const nv = pos.length/3, xf = new Float32Array(nv*4);
     for(let v=0;v<nv;v++) xf.set([1,1,0,0], v*4);
     const seat = res.islands.find(x=>x.role==='seat');
     const report = [];
-    if(!seat || (Math.abs(seat.mmU/refMm[0]-1) <= tolerance && Math.abs(seat.mmV/refMm[1]-1) <= tolerance)){
+    if(!seat || (!force && Math.abs(seat.mmU/refMm[0]-1) <= tolerance && Math.abs(seat.mmV/refMm[1]-1) <= tolerance)){
       return { xform:xf, report:[{role:'chaise', note:'déjà à l\'échelle, UV brutes'}], islands:res.islands, calibrated:false };
     }
     const dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
@@ -339,32 +437,95 @@ function hasFibreMaterial(weaveId){ return !!FIBRE_SETTINGS[weaveId]; }
     return { xform:xf, report, islands:res.islands, calibrated:true };
   }
 
-  global.FibreCalibration = { analyzeIslands, computeUvXform };
+  /*
+   * Centre le motif sur la face avant : le milieu de chaque îlot « face avant » (après calibrage)
+   * est déplacé sur la cible (u, v) la plus proche, à une période de motif près.
+   * S'applique à toutes les chaises, référence comprise.
+   */
+  function alignFrontIslands(pos, uv, idx, xf, target, period){
+    const res = analyzeIslands(pos, uv, idx);
+    const nv = pos.length/3;
+    const fronts = new Set(res.islands.filter(i=>i.role==='front').map(i=>i.root));
+    if(!fronts.size) return 0;
+    const rng = new Map();
+    for(let v=0; v<nv; v++){
+      const r = res.vertexIsland(v); if(!fronts.has(r)) continue;
+      const u2 = uv[2*v]*xf[4*v] + xf[4*v+2], v2 = uv[2*v+1]*xf[4*v+1] + xf[4*v+3];
+      let o = rng.get(r); if(!o){ o=[1e9,-1e9,1e9,-1e9]; rng.set(r,o); }
+      o[0]=Math.min(o[0],u2); o[1]=Math.max(o[1],u2); o[2]=Math.min(o[2],v2); o[3]=Math.max(o[3],v2);
+    }
+    const wrap = (x,p) => x - p*Math.round(x/p);
+    const shift = new Map();
+    for(const [r,o] of rng) shift.set(r, [wrap(target[0]-(o[0]+o[1])/2, period[0]), wrap(target[1]-(o[2]+o[3])/2, period[1])]);
+    for(let v=0; v<nv; v++){
+      const s = shift.get(res.vertexIsland(v)); if(!s) continue;
+      xf[4*v+2] += s[0]; xf[4*v+3] += s[1];
+    }
+    return fronts.size;
+  }
+
+  global.FibreCalibration = { analyzeIslands, computeUvXform, alignFrontIslands };
 })(typeof window !== 'undefined' ? window : globalThis);
 
 // Îlots de la chaise de référence (Tradition), mesurés une fois : rôle, échelle, sens, ancrage du motif.
 const FIBRE_REFERENCE = {
-  serge: [{"role":"seat","area":0.19675,"mmU":187.5,"mmV":147.8,"dirU":[1,-0.003,0],"dirV":[0,0.007,1],"anchorUv":[1.24148,3.05386]},{"role":"front","area":0.01661,"mmU":187.7,"mmV":118.2,"dirU":[1,0,-0.001],"dirV":[0,-1,-0.019],"anchorUv":[1.24358,3.06222]},{"role":"back","area":0.0914,"mmU":193.4,"mmV":134.7,"dirU":[1,0,0.002],"dirV":[0,-0.969,0.249],"anchorUv":[1.18923,2.20736]},{"role":"sideR","area":0.01064,"mmU":243.6,"mmV":152.6,"dirU":[-0.512,0.033,-0.859],"dirV":[0.223,0.973,-0.058],"anchorUv":[2.62724,0.87386]},{"role":"sideL","area":0.00666,"mmU":245,"mmV":134.1,"dirU":[0.266,-0.026,-0.964],"dirV":[-0.173,0.979,-0.105],"anchorUv":[3.74441,0.93761]}],
+  serge: [{"role": "seat", "area": 0.19675, "mmU": 187.5, "mmV": 147.8, "dirU": [1, -0.003, 0], "dirV": [0, 0.007, 1], "anchorUv": [1.24148, 3.05386]}, {"role": "front", "area": 0.01661, "mmU": 187.7, "mmV": 118.2, "dirU": [1, 0, -0.001], "dirV": [0, -1, -0.019], "anchorUv": [1.24358, 3.06222]}, {"role": "back", "area": 0.0914, "mmU": 193.4, "mmV": 134.7, "dirU": [1, 0, 0.002], "dirV": [0, -0.969, 0.249], "anchorUv": [1.18923, 2.20736]}, {"role": "sideR", "area": 0.01064, "mmU": 243.6, "mmV": 152.6, "dirU": [-0.512, 0.033, -0.859], "dirV": [0.223, 0.973, -0.058], "anchorUv": [2.62724, 0.87386]}, {"role": "sideL", "area": 0.00666, "mmU": 245, "mmV": 134.1, "dirU": [0.266, -0.026, -0.964], "dirV": [-0.173, 0.979, -0.105], "anchorUv": [3.74441, 0.93761]}],
+  damier: [{"role": "seat", "area": 0.19675, "mmU": 51.1, "mmV": 40.4, "dirU": [1, -0.004, 0], "dirV": [0, 0.005, 1], "anchorUv": [0.5622, 6.06762]}, {"role": "front", "area": 0.01661, "mmU": 50.9, "mmV": 40.2, "dirU": [1, 0, -0.001], "dirV": [0.001, -1, -0.019], "anchorUv": [0.5622, 2.02097]}, {"role": "back", "area": 0.0914, "mmU": 49.2, "mmV": 42.6, "dirU": [1, 0, 0.001], "dirV": [0, -0.969, 0.247], "anchorUv": [0.418, 3.09782]}, {"role": "sideR", "area": 0.01064, "mmU": 57.9, "mmV": 44.1, "dirU": [-0.542, 0.022, -0.84], "dirV": [0.201, 0.978, -0.062], "anchorUv": [5.29301, -1.30471]}, {"role": "sideL", "area": 0.00666, "mmU": 60.6, "mmV": 42.2, "dirU": [0.267, -0.026, -0.963], "dirV": [-0.179, 0.979, -0.103], "anchorUv": [7.11538, -1.22188]}],
+  chevron: [{"role": "seat", "area": 0.19675, "mmU": 84.9, "mmV": 37.7, "dirU": [1, -0.001, 0], "dirV": [0, 0.006, 1], "anchorUv": [0.69996, 4.82454]}, {"role": "front", "area": 0.01661, "mmU": 84.9, "mmV": 38.6, "dirU": [1, 0, -0.001], "dirV": [0, -1, -0.019], "anchorUv": [0.69996, 4.82761]}, {"role": "back", "area": 0.0914, "mmU": 85.8, "mmV": 40.1, "dirU": [1, 0, 0.002], "dirV": [0, -0.969, 0.248], "anchorUv": [0.62932, 2.19228]}, {"role": "sideR", "area": 0.01064, "mmU": 101.6, "mmV": 41.6, "dirU": [-0.546, 0.023, -0.838], "dirV": [0.177, 0.983, -0.056], "anchorUv": [3.80831, -1.9358]}, {"role": "sideL", "area": 0.00666, "mmU": 105.2, "mmV": 40.3, "dirU": [0.267, -0.026, -0.963], "dirV": [-0.172, 0.979, -0.107], "anchorUv": [4.93554, -1.81601]}],
+  natte: [{"role": "seat", "area": 0.19675, "mmU": 40.7, "mmV": 30.7, "dirU": [1, -0.005, 0], "dirV": [0, 0.003, 1], "anchorUv": [0.57819, 7.77049]}, {"role": "front", "area": 0.01661, "mmU": 40.8, "mmV": 31.1, "dirU": [1, 0, -0.001], "dirV": [0.001, -1, -0.019], "anchorUv": [0.57819, 1.79924]}, {"role": "back", "area": 0.0914, "mmU": 40, "mmV": 31.7, "dirU": [1, 0, 0.002], "dirV": [0, -0.969, 0.248], "anchorUv": [0.41794, 4.01495]}, {"role": "sideR", "area": 0.01064, "mmU": 48, "mmV": 32.7, "dirU": [-0.256, 0, -0.967], "dirV": [0.074, 0.997, 0], "anchorUv": [1.56063, -2.68791]}, {"role": "sideL", "area": 0.00666, "mmU": 43, "mmV": 30.6, "dirU": [0.268, -0.036, -0.963], "dirV": [-0.22, 0.972, -0.083], "anchorUv": [6.89434, -2.21063]}],
+  bourdon: [{"role": "seat", "area": 0.21336, "mmU": 457.3, "mmV": 250.1, "dirU": [1, -0.001, 0], "dirV": [0, -0.086, 0.996], "anchorUv": [2.09518, 0.76861]}, {"role": "back", "area": 0.09806, "mmU": 458.9, "mmV": 260.3, "dirU": [0.998, 0.002, 0.06], "dirV": [0.017, -0.972, 0.233], "anchorUv": [2.06246, 0.98948]}, {"role": "sideR", "area": 0.01064, "mmU": 535, "mmV": 266.3, "dirU": [-0.533, 0.022, -0.846], "dirV": [0.194, 0.979, -0.063], "anchorUv": [2.61462, 0.28087]}, {"role": "sideL", "area": 2e-05, "mmU": 2192, "mmV": 307.5, "dirU": [0.335, -0.009, -0.942], "dirV": [0.03, -0.714, 0.699], "anchorUv": [1.85386, 1.02578]}],
+  maille: [{"role":"seat","area":0.19675,"mmU":90.1,"mmV":87.2,"dirU":[1,-0.002,0],"dirV":[0,0.009,1],"anchorUv":[1.13684,2.16106]},{"role":"front","area":0.01661,"mmU":89.6,"mmV":90.3,"dirU":[1,0,0],"dirV":[0,-1,0],"anchorUv":[1.13953,6.65565]},{"role":"back","area":0.0914,"mmU":82.6,"mmV":86.9,"dirU":[1,0,-0.001],"dirV":[0,-0.969,0.249],"anchorUv":[0.94586,2.1234]},{"role":"sideR","area":0.01064,"mmU":97.8,"mmV":91.4,"dirU":[-0.499,0.024,-0.866],"dirV":[0.24,0.969,-0.059],"anchorUv":[4.45331,0.14374]},{"role":"sideL","area":0.00666,"mmU":101.4,"mmV":87.3,"dirU":[0.267,-0.028,-0.963],"dirV":[-0.175,0.979,-0.104],"anchorUv":[5.19299,0.1545]}],
 };
 
-/*
- * Prépare le maillage du tressage : calcule et pose l'attribut aUvXform (calibrage par îlot).
- * root : racine du modèle chargé. La mesure se fait dans les unités du GLB,
- * donc la mise à l'échelle d'affichage du configurateur n'influe pas.
- */
-const fibreXformCache = new WeakMap();
+// Copie du masque dédiée : filtrage au plus proche, sans anisotrope ni mipmaps,
+// pour lire une case exacte (sinon des coutures apparaissent aux raccords d'UV).
+const fibreMaskCache = {};
+// Carte de fibre (Maille) : donnée, pas une couleur. Filtrage linéaire, sans conversion sRGB.
+const fibreDataCache = {};
+function getFibreDataTexture(uri){
+  if(!fibreDataCache[uri]){
+    const tex = new THREE.TextureLoader().load(uri, () => { if(typeof requestRender === 'function') requestRender(); });
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    if(THREE.LinearEncoding) tex.encoding = THREE.LinearEncoding;
+    fibreDataCache[uri] = tex;
+  }
+  return fibreDataCache[uri];
+}
+
+function getFibreMaskTexture(uri){
+  if(!fibreMaskCache[uri]){
+    const tex = new THREE.TextureLoader().load(uri, () => { if(typeof requestRender === 'function') requestRender(); });
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+    tex.magFilter = tex.minFilter = THREE.NearestFilter;
+    tex.generateMipmaps = false;
+    tex.anisotropy = 1;
+    fibreMaskCache[uri] = tex;
+  }
+  return fibreMaskCache[uri];
+}
+
+function hasFibreMaterial(weaveId){ return !!FIBRE_SETTINGS[weaveId]; }
+
 function fibreAttrGetter(attr){
   const arr = attr.isInterleavedBufferAttribute ? attr.data.array : attr.array;
   const div = !attr.normalized ? 1 : arr instanceof Int16Array ? 32767 : arr instanceof Uint16Array ? 65535 : arr instanceof Int8Array ? 127 : arr instanceof Uint8Array ? 255 : 1;
   if(attr.isInterleavedBufferAttribute){ const d = attr.data; return (i,k)=>d.array[i*d.stride + attr.offset + k] / div; }
   return (i,k)=>arr[i*attr.itemSize + k] / div;
 }
-function prepareFibreGeometry(mesh, root, weaveId){
-  const g = mesh.geometry;
-  const key = weaveId;
+
+/*
+ * Prépare le maillage du tressage : calcule et pose l'attribut aUvXform (calibrage par îlot).
+ * root    : racine du modèle chargé (la mesure se fait dans les unités du GLB,
+ *           la mise à l'échelle d'affichage du configurateur n'influe donc pas)
+ * shapeId : structure affichée (tradition, harpe, resille, ogive)
+ */
+const fibreXformCache = new WeakMap();
+function prepareFibreGeometry(mesh, root, weaveId, shapeId){
+  const g = mesh.geometry, key = weaveId + '|' + shapeId;
   const cached = fibreXformCache.get(g);
-  if(cached && cached.key === key){ return cached.res; }
+  if(cached && cached.key === key) return cached.res;
   const P = g.attributes.position, U = g.attributes.uv, I = g.index;
+  const cfg = FIBRE_SETTINGS[weaveId];
   const identity = () => { const a = new Float32Array(P.count*4); for(let i=0;i<P.count;i++) a.set([1,1,0,0], i*4); return a; };
   let res = null, xf;
   try{
@@ -375,9 +536,14 @@ function prepareFibreGeometry(mesh, root, weaveId){
     const gp = fibreAttrGetter(P), gu = fibreAttrGetter(U), v3 = new THREE.Vector3();
     const pos = new Float64Array(P.count*3), uv = new Float64Array(U.count*2);
     for(let i=0;i<P.count;i++){ v3.set(gp(i,0),gp(i,1),gp(i,2)).applyMatrix4(M); pos[3*i]=v3.x; pos[3*i+1]=v3.y; pos[3*i+2]=v3.z; uv[2*i]=gu(i,0); uv[2*i+1]=gu(i,1); }
-    const cfg = FIBRE_SETTINGS[weaveId];
-    res = FibreCalibration.computeUvXform(pos, uv, I ? I.array : null, FIBRE_REFERENCE[weaveId] || [], cfg.refUvMm);
-    xf = res.xform;
+    if((cfg.rawShapes || []).includes(shapeId)){
+      xf = identity();   // chaise de référence : UV brutes
+    } else {
+      res = FibreCalibration.computeUvXform(pos, uv, I ? I.array : null, FIBRE_REFERENCE[weaveId] || [], cfg.refUvMm, 0.08, true);
+      xf = res.xform;
+    }
+    // Face avant : frise centrée sur une rangée de motifs (toutes chaises, référence comprise)
+    if(cfg.frontCenter) FibreCalibration.alignFrontIslands(pos, uv, I ? I.array : null, xf, cfg.frontCenter, cfg.frontPeriod || [0.5,0.5]);
   }catch(err){
     console.warn('Calibrage fibre impossible, UV brutes utilisées.', err);
     xf = identity();
@@ -388,13 +554,16 @@ function prepareFibreGeometry(mesh, root, weaveId){
 }
 
 /*
- * weaveId    : 'serge' (seul tressage branché pour l'instant)
+ * weaveId    : 'serge', 'damier', 'chevron', 'natte', 'bourdon' ou 'maille'
+ *              Maille : c1 croix A, c2 fuseaux, c3 croix B, c4 grille droite
  * maskUri    : chemin du masque du motif
+ * colors     : couleurs hex. Sergé : c1 vertical, c2 horizontal.
+ *              Damier : c1 vertical centre, c2 vertical bords, c3 horizontal centre, c4 horizontal bords
  * mappingTex : texture baked du GLB si présente (donne le cadrage UV et le sens), sinon null
  * calibrated : true si prepareFibreGeometry() a été appelé sur le maillage (sinon UV brutes,
  *              par exemple pour l'échantillon plat du PDF)
  */
-function makeFibreMat(weaveId, maskUri, c1hex, c2hex, mappingTex, calibrated){
+function makeFibreMat(weaveId, maskUri, c1hex, c2hex, c3hex, c4hex, mappingTex, calibrated){
   const cfg = FIBRE_SETTINGS[weaveId];
   const mask = getFibreMaskTexture(maskUri);
   const ref = mappingTex && mappingTex.isTexture ? mappingTex : mask;
@@ -405,7 +574,11 @@ function makeFibreMat(weaveId, maskUri, c1hex, c2hex, mappingTex, calibrated){
       uMaskMatrix:{value:ref.matrix.clone()},
       uReferenceFlipY:{value: ref.flipY === mask.flipY ? 0 : 1},
       uGrid:{value:new THREE.Vector2(cfg.grid[0], cfg.grid[1])},
+      uWeave:{value:cfg.weaveType},
+      uMaskGrid:{value:new THREE.Vector2((cfg.maskGrid||cfg.grid)[0], (cfg.maskGrid||cfg.grid)[1])},
+      uFibreMap:{value: cfg.fibreMap ? getFibreDataTexture(cfg.fibreMap) : mask},
       uC1:{value:hexToVec3(c1hex)}, uC2:{value:hexToVec3(c2hex)},
+      uC3:{value:hexToVec3(c3hex || c1hex)}, uC4:{value:hexToVec3(c4hex || c2hex)},
       uRough:{value:cfg.rough}, uRelief:{value:cfg.relief}, uAO:{value:cfg.ao}, uEnv:{value:cfg.env},
       uPairs:{value:cfg.pairs}, uPlain:{value:0}, uCalib:{value: calibrated ? 1 : 0},
       // Mêmes directions que les lumières de la scène (clé, remplissage, contre-jour)
