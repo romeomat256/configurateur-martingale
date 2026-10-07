@@ -2632,6 +2632,17 @@ async function generateExportPDF(){
     });
   }
 
+  // Attend que toutes les textures d'un matériau soient chargées (masque, carte de fibre...).
+  // Sans cela, l'échantillon du PDF peut être dessiné avant l'arrivée du motif.
+  async function waitMaterialTextures(mat, timeout=6000){
+    const texs = Object.values(mat?.uniforms || {}).map(u=>u && u.value).filter(v=>v && v.isTexture);
+    if(mat?.map) texs.push(mat.map);
+    const ready = t => { const i = t.image; return !!i && i.complete !== false && !!(i.width || i.naturalWidth); };
+    const t0 = performance.now();
+    while(texs.some(t=>!ready(t)) && performance.now()-t0 < timeout) await new Promise(r=>setTimeout(r,50));
+    texs.forEach(t=>{ t.needsUpdate = true; });
+  }
+
   const weaveObj = WEAVES.find(x=>x.id===S.weave)||WEAVES[0];
   async function makePDFWeaveSample(weaveId, pxW=1400, pxH=860){
     let mat = null;
@@ -2648,6 +2659,7 @@ async function generateExportPDF(){
       mat = new THREE.MeshStandardMaterial({map:tex, roughness:0.58, metalness:0});
     }
     if(!mat) return null;
+    await waitMaterialTextures(mat);
 
     const swRenderer = new THREE.WebGLRenderer({antialias:true, alpha:false, preserveDrawingBuffer:true});
     swRenderer.setPixelRatio(1);
