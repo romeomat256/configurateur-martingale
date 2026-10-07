@@ -414,7 +414,7 @@ button.acc-header{width:100%;border:0;background:transparent;text-align:left;fon
       <div class="advisor-panel" id="advisor-panel">
         <div class="advisor-sub">Ambiance</div>
         <div class="advisor-nuances" id="advisor-nuances"></div>
-        <button class="advisor-action" id="advisor-action" onclick="proposeAdvisorHarmony()">Proposer des harmonies</button>
+        <button class="advisor-action" id="advisor-action" onclick="proposeAdvisorHarmony()">Proposer une harmonie</button>
         <div class="advisor-result" id="advisor-result"></div>
       </div>
 
@@ -1237,9 +1237,8 @@ function advisorCardsHtml(){
   }).join('')+'</div>';
 }
 function advisorCurrentHtml(){
-  var html=advisorCardsHtml();
-  if(!advisorLast)return html;
-  return html+'<div class="advisor-current">'+
+  if(!advisorLast)return '';
+  return '<div class="advisor-current">'+
     '<div class="advisor-result-title">Couleur contour</div>'+
     advisorContourRecallHtml(advisorLast.assignments,advisorLast.contourId)+
   '</div>';
@@ -1285,7 +1284,7 @@ function renderAdvisor(){
   result.className='advisor-result visible';
   result.innerHTML=advisorCurrentHtml();
   var action=document.getElementById('advisor-action');
-  if(action)action.textContent=advisorProposals.length?'Autres idées':'Proposer des harmonies';
+  if(action)action.textContent=advisorProposals.length?'Autre idée':'Proposer une harmonie';
 }
 function setColorMode(mode){
   S.colorMode=mode==='advisor'?'advisor':'manual';
@@ -1347,6 +1346,11 @@ function setAdvisorContour(colorId){
 }
 function proposeAdvisorHarmony(){
   if(!initAdvisorEngine())return;
+  // Le moteur prépare 4 idées variées : chaque clic passe à la suivante, puis on en prépare 4 nouvelles
+  if(advisorLast&&advisorProposals.length&&advisorLast.proposalIdx<advisorProposals.length-1){
+    applyAdvisorProposal(advisorLast.proposalIdx+1);
+    return;
+  }
   var previousKeys=advisorProposals.map(function(p){return p.cle;});
   advisorShownKeys=advisorShownKeys.concat(previousKeys).slice(-80);
   advisorProposals=window.ConseillerMartingale.recommander({
