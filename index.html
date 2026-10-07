@@ -513,29 +513,29 @@ const COLORS=[
   {id:'blanc',       name:'Blanc pur',        hex:'#F5F2EC', border:true},
   {id:'ivoire',      name:'Ivoire ancien',    hex:'#F1E6B2', border:true},
   {id:'creme',       name:'Beige désert',     hex:'#EDE4CC', border:true},
+  {id:'ecru',        name:'Écru',             hex:'#D6D2C4', border:true},
   {id:'argent',      name:'Argent clair',     hex:'#B8BBBB'},
   {id:'gris',        name:'Gris cendre',      hex:'#9EA2A2'},
   {id:'noir',        name:'Noir profond',     hex:'#1A1A16'},
   // Naturels / Bois — Minéral
-  {id:'naturel',     name:'Rotin naturel',    hex:'#C8A86B'},
+  {id:'naturel',     name:'Camel',            hex:'#B9975B'},
   {id:'or',          name:'Or mat',           hex:'#C9A84C'},
   {id:'bronze',      name:'Bronze ancien',    hex:'#9C7A3C'},
   {id:'brun',        name:'Brun miel',        hex:'#7A5230'},
-  {id:'chocolat',    name:'Chocolat noir',    hex:'#744F28'},
+  {id:'chocolat',    name:'Chocolat',         hex:'#744F28'},
   {id:'marron',      name:'Marron glacé',     hex:'#4F2C1D'},
   // Chauds / Terracotta — Soleil
   {id:'peche',       name:'Pêche velours',    hex:'#F0B285'},
   {id:'saumon',      name:'Saumon fumé',      hex:'#F7BCAC'},
-  {id:'terracotta',  name:'Terracotta',       hex:'#FFA38B'},
+  {id:'terracotta',  name:'Corail poudré',    hex:'#FFA38B'},
   {id:'orange',      name:'Orange épicé',     hex:'#F58132'},
-  {id:'jaune',       name:'Jaune miel',       hex:'#FEDB00'},
-  {id:'ecru',        name:'Écru brûlé',       hex:'#F4633A'},
+  {id:'jaune',       name:'Jaune citron',     hex:'#FEDB00'},
   // Roses / Rouges — Passion
-  {id:'rose',        name:'Rose poudré',      hex:'#FF8DA1'},
+  {id:'rose',        name:'Rose bonbon',      hex:'#FF8DA1'},
   {id:'framboise',   name:'Framboise vivace', hex:'#E24585'},
   {id:'fushia',      name:'Fuchsia sombre',   hex:'#A73A64'},
   {id:'rouge',       name:'Rouge cerise',     hex:'#BA0C2F'},
-  {id:'rouge-eau',   name:'Rouge rouille',    hex:'#E56A54'},
+  {id:'rouge-eau',   name:'Corail',           hex:'#E56A54'},
   {id:'bordeaux',    name:'Bordeaux noble',   hex:'#8E2C48'},
   // Violets — Mystère
   {id:'prune',       name:'Prune veloutée',   hex:'#A15A95'},
@@ -1107,8 +1107,8 @@ const ADVISOR_NUANCES=[
 ];
 
 const ADVISOR_ENGINE_TRESSAGES={
-  maille:  {slots:['c1','c2','c3'],couverture:[0.55,0.30,0.15],contraste:[0.20,0.40]},
-  damier:  {slots:['c1','c2','c3'],couverture:[0.45,0.45,0.10],contraste:[0.30,0.65]},
+  maille:  {slots:['c1','c3','c2'],echo:{c5:'c1'},couverture:[0.47,0.29,0.24],contraste:[0.20,0.40]},
+  damier:  {slots:['c1','c3','c2'],echo:{c5:'c1'},couverture:[0.50,0.30,0.20],contraste:[0.30,0.65]},
   serge:   {slots:['c1','c2'],couverture:[0.50,0.50],contraste:[0.08,0.25]},
   chevron: {slots:['c1','c2'],couverture:[0.50,0.50],contraste:[0.08,0.25]},
   natte:   {slots:['c1','c2','c3'],couverture:[0.50,0.35,0.15],contraste:[0.15,0.35]},

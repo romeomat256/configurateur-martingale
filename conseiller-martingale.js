@@ -29,8 +29,11 @@
   // contraste : écart de clarté idéal entre dominante et équilibre
   // À caler sur les slots réels du mode manuel.
   const TRESSAGES = {
-    maille:  { label: 'Maille',  slots: ['c1', 'c2', 'c3'], couverture: [0.55, 0.30, 0.15], contraste: [0.20, 0.40] },
-    damier:  { label: 'Damier',  slots: ['c1', 'c2', 'c3'], couverture: [0.45, 0.45, 0.10], contraste: [0.30, 0.65] },
+    // Maille, mesuré sur le masque : croix A (c1) 29 %, croix B (c3) 29 %, fuseaux (c2) 24 %, grille (c5) 18 %.
+    // La grille reprend la dominante : dominante = c1 + c5 (47 %), équilibre = croix B, accent = fuseaux.
+    maille:  { label: 'Maille',  slots: ['c1', 'c3', 'c2'], echo: { c5: 'c1' }, couverture: [0.47, 0.29, 0.24], contraste: [0.20, 0.40] },
+    // Damier, mesuré sur la tuile 10 x 8 : c1 20 %, c2 20 %, c3 30 %, c5 30 %. c5 reprend la dominante c1.
+    damier:  { label: 'Damier',  slots: ['c1', 'c3', 'c2'], echo: { c5: 'c1' }, couverture: [0.50, 0.30, 0.20], contraste: [0.30, 0.65] },
     serge:   { label: 'Sergé',   slots: ['c1', 'c2'],       couverture: [0.50, 0.50],       contraste: [0.08, 0.25] },
     chevron: { label: 'Chevron', slots: ['c1', 'c2'],       couverture: [0.50, 0.50],       contraste: [0.08, 0.25] },
     natte:   { label: 'Natté',   slots: ['c1', 'c2', 'c3'], couverture: [0.50, 0.35, 0.15], contraste: [0.15, 0.35] },
@@ -134,7 +137,7 @@
 
   const FAMILLES = {
     aucune:   { label: 'Aucune nuance', test: () => true },
-    naturels: { label: 'Naturels', test: ([d]) => d.id === 'rotin-naturel' || (d.H >= 40 && d.H <= 110 && d.C <= 0.10) || (d.C < 0.03 && d.L > 0.8) },
+    naturels: { label: 'Naturels', test: ([d]) => d.id === 'naturel' || (d.H >= 40 && d.H <= 110 && d.C <= 0.10 && d.L >= 0.5) || (d.C < 0.03 && d.L > 0.8) },
     rouges:   { label: 'Rouges', test: ([d]) => (d.H >= 330 || d.H < 40) && d.C >= 0.08 },
     verts:    { label: 'Verts', test: ([d]) => d.H >= 108 && d.H < 190 && d.C >= 0.045 },
     bleus:    { label: 'Bleus', test: ([d]) => d.H >= 190 && d.H < 300 && d.C >= 0.025 },
@@ -158,7 +161,7 @@
   /* ================= Recettes signatures ================= */
   // Chaque recette décrit des rôles, pas des couleurs figées. À enrichir avec la graphiste.
 
-  const naturel = c => c.id === 'rotin-naturel' || (c.H >= 45 && c.H <= 105 && c.C >= 0.015 && c.C <= 0.09 && c.L >= 0.6);
+  const naturel = c => c.id === 'naturel' || (c.H >= 45 && c.H <= 105 && c.C >= 0.015 && c.C <= 0.09 && c.L >= 0.6);
 
   const RECETTES = [
     { id: 'terrasse', label: 'Terrasse classique', adj: ['classique', 'intemporel', 'de terrasse'],
@@ -288,7 +291,8 @@
 
   /* ================= Contours ================= */
 
-  const CLASSIQUES = ['blanc', 'noir', 'ecru', 'ivoire', 'rotin-naturel', 'anthracite'];
+  // ids réels de la palette du configurateur (anthracite et greige : prévus pour le prochain nuancier)
+  const CLASSIQUES = ['blanc', 'noir', 'ecru', 'ivoire', 'gris', 'anthracite', 'greige'];
   const STYLES_CONTOUR = { 'ton-sur-ton': 'Ton sur ton', echo: 'Écho du tressage', neutre: 'Neutre', accent: 'Signature' };
 
   function noterContour(cols, c, mix) {
@@ -297,7 +301,7 @@
     const idx = cols.findIndex(x => x.id === c.id);
     if (idx === 0) { style = 'ton-sur-ton'; sc += 6; }
     else if (idx > 0) { style = 'echo'; sc += 14; }
-    else if (c.appui || c.metallise || c.id === 'rotin-naturel') {
+    else if (c.appui || c.metallise || c.id === 'naturel') {
       style = 'neutre'; sc += 6 + (CLASSIQUES.includes(c.id) ? 4 : 0);
       // cohérence de température entre le contour neutre et le tressage
       const neutreChaud = !c.metallise && c.C >= 0.02 && c.H >= 40 && c.H <= 110;
@@ -445,6 +449,8 @@
   function finaliser(x, t) {
     const couleurs = {}, slots = {};
     t.slots.forEach((slot, i) => { couleurs[slot] = x.cols[i].id; slots[slot] = x.cols[i].hex; });
+    // Cases en écho : la 4e couleur du tressage reprend un rôle déjà noté (ex. grille Maille = dominante)
+    Object.keys(t.echo || {}).forEach(slot => { couleurs[slot] = couleurs[t.echo[slot]]; slots[slot] = slots[t.echo[slot]]; });
     slots[CONFIG.contourSlot] = x.contour.hex;
     return {
       id: t.id + ':' + cleDe(x) + ':' + x.contour.id,
