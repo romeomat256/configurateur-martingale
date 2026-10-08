@@ -24,7 +24,7 @@ const FIBRE_SETTINGS = {
   // calculée depuis le masque. frontWrap : face avant raccordée à l'assise (prioritaire).
   // frontCenter : centre d'une croix, en UV de motif (ancien réglage, face avant centrée).
   maille: { weaveType:4, grid:[12.3,12.3], rough:0.86, relief:0.44, ao:0.34, env:1.08, pairs:1, refUvMm:[90.1,87.2], rawShapes:['tradition'],
-            fibreMap:'textures/maille-fibremap.png', frontWrap:true, frontCenter:[0.2857,0.5823], frontPeriod:[0.5,0.5] },
+            fibreMap:'textures/maille-fibremap.png', frontWrap:true, frontCenter:[0.2857,0.6223], frontPeriod:[0.5,0.5] },
 };
 
 const FIBRE_VERT = `
