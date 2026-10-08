@@ -2457,6 +2457,30 @@ async function generateExportPDF(){
   const SHOT_W=1000, SHOT_H=1250;              // format 4:5
   const views={}, details=[];
 
+  // Filigrane du PDF : logo Martingale répété en diagonale sur chaque photo, en plus du filigrane tissé
+  const wmLogo=await new Promise(res=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>res(null);im.src='textures/filigrane-martingale.png';});
+  // Version claire du logo : lisible aussi sur les brins foncés
+  let wmLight=null;
+  if(wmLogo){ wmLight=document.createElement('canvas'); wmLight.width=wmLogo.width; wmLight.height=wmLogo.height;
+    const lc=wmLight.getContext('2d'); lc.drawImage(wmLogo,0,0); lc.globalCompositeOperation='source-in'; lc.fillStyle='#FFFFFF'; lc.fillRect(0,0,wmLight.width,wmLight.height); }
+  function stampWatermark(o,W,H){
+    if(!wmLogo)return;
+    const lw=W*0.30, lh=lw*wmLogo.height/wmLogo.width, sx=lw*1.45, sy=lh*2.2;
+    const R=Math.hypot(W,H);
+    const pass=(img,alpha,dx,dy)=>{
+      o.save(); o.globalAlpha=alpha; o.translate(W/2+dx,H/2+dy); o.rotate(-24*Math.PI/180);
+      for(let row=0, y=-R; y<R; y+=sy, row++){
+        for(let x=-R+(row%2)*sx/2; x<R; x+=sx) o.drawImage(img,x-lw/2,y-lh/2,lw,lh);
+      }
+      o.restore();
+    };
+    pass(wmLight,0.30,0,0);           // clair : se lit sur le foncé
+    pass(wmLogo,0.20,1.5,1.5);        // foncé, léger décalage : se lit sur le clair
+  }
+  // Filigrane tissé plus marqué pendant les captures du PDF
+  const wovenSaved=[];
+  group.traverse(ob=>{const m=ob.material; if(m&&m.uniforms&&m.uniforms.uLogoTile){wovenSaved.push([m,m.uniforms.uLogoTile.value.w,m.uniforms.uLogoTile.value.clone(),m.uniforms.uLogoBox.value.clone()]); m.uniforms.uLogoTile.value.w=(typeof FIBRE_LOGO!=='undefined'&&FIBRE_LOGO.pdfStrength)||1;}});
+
   // Composition d'une chaise : centrée sur la chaise seule (ombre exclue), hauteur 80 % du cadre
   function composeChair(srcCanvas){
     const w=srcCanvas.width, h=srcCanvas.height;
@@ -2468,16 +2492,18 @@ async function generateExportPDF(){
     }
     const out=document.createElement('canvas'); out.width=SHOT_W; out.height=SHOT_H;
     const o=out.getContext('2d'); o.fillStyle=CREME; o.fillRect(0,0,SHOT_W,SHOT_H);
-    if(x1<0){ o.drawImage(srcCanvas,0,0,SHOT_W,SHOT_H); return out.toDataURL('image/jpeg',0.9); }
+    if(x1<0){ o.drawImage(srcCanvas,0,0,SHOT_W,SHOT_H); stampWatermark(o,SHOT_W,SHOT_H); return out.toDataURL('image/jpeg',0.9); }
     const s=(SHOT_H*0.80)/(y1-y0+1);
     const cx=(x0+x1+1)/2*s, cy=(y0+y1+1)/2*s;
     o.drawImage(srcCanvas,SHOT_W/2-cx,SHOT_H/2-cy,w*s,h*s);
+    stampWatermark(o,SHOT_W,SHOT_H);
     return out.toDataURL('image/jpeg',0.9);
   }
   function composeDetail(srcCanvas){
     const out=document.createElement('canvas'); out.width=SHOT_W; out.height=SHOT_H;
     const o=out.getContext('2d'); o.fillStyle=CREME; o.fillRect(0,0,SHOT_W,SHOT_H);
     o.drawImage(srcCanvas,0,0,SHOT_W,SHOT_H);
+    stampWatermark(o,SHOT_W,SHOT_H);
     return out.toDataURL('image/jpeg',0.88);
   }
   function grabCanvas(){
@@ -2534,6 +2560,8 @@ async function generateExportPDF(){
     ];
     // Dossier sans tressage (Harpe, Résille) : on montre le motif du dossier de face
     if(S.shape==='harpe' || S.shape==='resille') DETAILS[1]={rot:[0,0], tx:0, ty:0.80, tz:-0.35, d:[0,0.05,1], fov:20};
+    // Gros plans : filigrane tissé deux fois plus petit, pour qu'il entre en entier dans le cadre
+    wovenSaved.forEach(([m])=>{ m.uniforms.uLogoTile.value.x*=0.5; m.uniforms.uLogoTile.value.y*=0.5; m.uniforms.uLogoBox.value.multiplyScalar(0.5); });
     for(const p of DETAILS){
       const rot=p.rot||[0.08,0.6];
       group.rotation.set(rot[0],rot[1],0); group.updateMatrixWorld(true);
@@ -2546,6 +2574,7 @@ async function generateExportPDF(){
       details.push(composeDetail(await renderNow(det)));
     }
   } finally {
+    wovenSaved.forEach(([m,w,t,b])=>{m.uniforms.uLogoTile.value.copy(t); m.uniforms.uLogoTile.value.w=w; m.uniforms.uLogoBox.value.copy(b);});
     scene.background=savedBg; scene.fog=savedFog;
     renderer.setClearColor(savedClear,savedClearAlpha);
     group.rotation.copy(savedRotation);
