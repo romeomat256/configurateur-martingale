@@ -34,7 +34,13 @@ const FIBRE_VERT = `
   varying vec2 vUv;
   varying vec3 vNormalW;
   varying vec3 vWorldPos;
+  uniform vec3 uLogoUp;      // haut de la chaise, dans le repère du maillage
+  uniform vec3 uLogoBack;    // direction avant -> dossier, dans le repère du maillage
+  varying vec3 vObjUp;
+  varying vec3 vObjBack;
   void main(){
+    vObjUp = normalize(mat3(modelMatrix) * uLogoUp);
+    vObjBack = normalize(mat3(modelMatrix) * uLogoBack);
     vUv = (uMaskMatrix * vec3(mix(uv, uv * aUvXform.xy + aUvXform.zw, uCalib), 1.0)).xy;
     vec4 wp = modelMatrix * vec4(position,1.0);
     vWorldPos = wp.xyz;
@@ -52,6 +58,12 @@ const FIBRE_FRAG = `
   uniform float uReferenceFlipY;
   uniform vec3 uKeyDir, uFillDir, uRimDir;
   uniform sampler2D uFibreMap;   // Maille : carte de fibre
+  uniform sampler2D uLogo;       // filigrane Martingale (alpha)
+  uniform float uLogoOn;         // 1 = filigrane tissé dans le tressage
+  uniform vec4 uLogoTile;        // largeur et hauteur de tuile (UV calibrées), -, intensité
+  uniform vec2 uLogoBox;         // largeur et hauteur du logo (UV calibrées)
+  varying vec3 vObjUp;
+  varying vec3 vObjBack;
   varying vec2 vUv;
   varying vec3 vNormalW;
   varying vec3 vWorldPos;
@@ -255,6 +267,33 @@ const FIBRE_FRAG = `
       ao = mix(1.0 - uAO*0.14, aoProf*aoDive, detail);
       base = mix(base, under, gap*0.85);
       ao *= 1.0 - gap*0.72;
+    }
+
+    // Filigrane : le logo teinte les brins eux-mêmes (suit le relief et la lumière)
+    if(uLogoOn > 0.5 && uPlain < 0.5){
+      vec2 lu = vec2(vUv.x, mix(vUv.y, 1.0 - vUv.y, uReferenceFlipY));
+      vec2 tile = uLogoTile.xy;
+      float row = floor(lu.y / tile.y);
+      vec2 q = vec2(lu.x / tile.x + row*0.5, lu.y / tile.y);
+      vec2 d = (fract(q) - 0.5) * tile;                       // position dans la tuile, centrée
+      vec2 box = uLogoBox;                                    // taille du logo en UV (texture 1024 x 256)
+      // Sens de lecture : debout sur les faces verticales, lisible depuis l'avant sur l'assise,
+      // jamais en miroir quel que soit le côté regardé
+      vec3 lp1 = dFdx(vWorldPos), lp2 = dFdy(vWorldPos);
+      vec2 lu1 = dFdx(lu), lu2 = dFdy(lu);
+      vec3 lT = cross(lp2, N)*lu1.x + cross(N, lp1)*lu2.x;   // direction des u croissants
+      vec3 lB = cross(lp2, N)*lu1.y + cross(N, lp1)*lu2.y;   // direction des v croissants
+      vec3 up = normalize(vObjUp);
+      vec3 want = abs(dot(N, up)) < 0.6 ? up : normalize(vObjBack);
+      vec3 Nv = dot(N, V) < 0.0 ? -N : N;
+      vec3 right = cross(want, Nv);
+      vec2 p = d * vec2(dot(lT, right) < 0.0 ? -1.0 : 1.0, dot(lB, want) < 0.0 ? -1.0 : 1.0);
+      vec2 luv = p / box + 0.5;
+      float inside = step(0.0, luv.x) * step(luv.x, 1.0) * step(0.0, luv.y) * step(luv.y, 1.0);
+      float la = texture2D(uLogo, luv).a * inside;
+      float lum = dot(base, vec3(0.299, 0.587, 0.114));
+      vec3 ink = lum > 0.42 ? vec3(0.07, 0.07, 0.065) : vec3(0.95, 0.94, 0.91);   // noir sur brins clairs, blanc sur brins foncés : lisible sur toute capture
+      base = mix(base, ink, la * uLogoTile.w);
     }
 
     // Matière : PVC teinté masse, vernis brillant
@@ -586,6 +625,26 @@ function getFibreMaskTexture(uri){
   return fibreMaskCache[uri];
 }
 
+let fibreLogoTex = null;
+function getFibreLogoTexture(){
+  if(!fibreLogoTex){
+    fibreLogoTex = new THREE.TextureLoader().load('textures/filigrane-martingale.png', () => { if(typeof requestRender === 'function') requestRender(); });
+    fibreLogoTex.wrapS = fibreLogoTex.wrapT = THREE.ClampToEdgeWrapping;
+    fibreLogoTex.anisotropy = 4;
+  }
+  return fibreLogoTex;
+}
+// Filigrane tissé : tailles en mm réels, converties en UV avec refUvMm de chaque tressage
+const FIBRE_LOGO = { on: true, tileMm: [290, 135], logoMm: 235, strength: 1.0, pdfStrength: 1.0 };
+function fibreLogoUniforms(cfg){
+  const mm = cfg.refUvMm || [100, 100];
+  const L = FIBRE_LOGO;
+  return {
+    tile: new THREE.Vector4(L.tileMm[0]/mm[0], L.tileMm[1]/mm[1], 0, L.strength),
+    box: new THREE.Vector2(L.logoMm/mm[0], L.logoMm*0.25/mm[1]),
+  };
+}
+
 function hasFibreMaterial(weaveId){ return !!FIBRE_SETTINGS[weaveId]; }
 
 function fibreAttrGetter(attr){
@@ -605,16 +664,23 @@ const fibreXformCache = new WeakMap();
 function prepareFibreGeometry(mesh, root, weaveId, shapeId){
   const g = mesh.geometry, key = weaveId + '|' + shapeId;
   const cached = fibreXformCache.get(g);
-  if(cached && cached.key === key) return cached.res;
+  if(cached && cached.key === key){ if(cached.hook) mesh.onBeforeRender = cached.hook; return cached.res; }
   const P = g.attributes.position, U = g.attributes.uv, I = g.index;
   const cfg = FIBRE_SETTINGS[weaveId];
   const identity = () => { const a = new Float32Array(P.count*4); for(let i=0;i<P.count;i++) a.set([1,1,0,0], i*4); return a; };
-  let res = null, xf;
+  let res = null, xf, hook = null;
   try{
     if(!U) throw new Error('pas d\'UV');
     if(root) root.updateMatrixWorld(true); else mesh.updateMatrixWorld(true);
     const M = new THREE.Matrix4();
     if(root) M.copy(root.matrixWorld).invert().multiply(mesh.matrixWorld); else M.copy(mesh.matrixWorld);
+    // Filigrane : haut et sens avant -> dossier de la chaise, exprimés dans le repère du maillage
+    const Mi = new THREE.Matrix4().copy(M).invert();
+    const upL = new THREE.Vector3(0,1,0).transformDirection(Mi), backL = new THREE.Vector3(0,0,-1).transformDirection(Mi);
+    hook = function(r, s, c, geo, mat){
+      if(mat && mat.uniforms && mat.uniforms.uLogoUp){ mat.uniforms.uLogoUp.value.copy(upL); mat.uniforms.uLogoBack.value.copy(backL); }
+    };
+    mesh.onBeforeRender = hook;
     const gp = fibreAttrGetter(P), gu = fibreAttrGetter(U), v3 = new THREE.Vector3();
     const pos = new Float64Array(P.count*3), uv = new Float64Array(U.count*2);
     for(let i=0;i<P.count;i++){ v3.set(gp(i,0),gp(i,1),gp(i,2)).applyMatrix4(M); pos[3*i]=v3.x; pos[3*i+1]=v3.y; pos[3*i+2]=v3.z; uv[2*i]=gu(i,0); uv[2*i+1]=gu(i,1); }
@@ -633,7 +699,7 @@ function prepareFibreGeometry(mesh, root, weaveId, shapeId){
     xf = identity();
   }
   g.setAttribute('aUvXform', new THREE.BufferAttribute(xf, 4));
-  fibreXformCache.set(g, {key, res});
+  fibreXformCache.set(g, {key, res, hook});
   return res;
 }
 
@@ -665,6 +731,9 @@ function makeFibreMat(weaveId, maskUri, c1hex, c2hex, c3hex, c4hex, mappingTex, 
       uC3:{value:hexToVec3(c3hex || c1hex)}, uC4:{value:hexToVec3(c4hex || c2hex)},
       uRough:{value:cfg.rough}, uRelief:{value:cfg.relief}, uAO:{value:cfg.ao}, uEnv:{value:cfg.env},
       uPairs:{value:cfg.pairs}, uPlain:{value:0}, uCalib:{value: calibrated ? 1 : 0},
+      uLogo:{value:getFibreLogoTexture()}, uLogoOn:{value: FIBRE_LOGO.on ? 1 : 0},
+      uLogoTile:{value:fibreLogoUniforms(cfg).tile}, uLogoBox:{value:fibreLogoUniforms(cfg).box},
+      uLogoUp:{value:new THREE.Vector3(0,1,0)}, uLogoBack:{value:new THREE.Vector3(0,0,-1)},
       // Mêmes directions que les lumières de la scène (clé, remplissage, contre-jour)
       uKeyDir:{value:new THREE.Vector3(3.4,5.6,3.6).normalize()},
       uFillDir:{value:new THREE.Vector3(-3.5,2.4,2.8).normalize()},

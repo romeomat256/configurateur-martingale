@@ -2489,6 +2489,10 @@ async function generateExportPDF(){
   const SHOT_W=1000, SHOT_H=1250;              // format 4:5
   const views={}, details=[];
 
+  // Filigrane tissé plus marqué pendant les captures du PDF
+  const wovenSaved=[];
+  group.traverse(ob=>{const m=ob.material; if(m&&m.uniforms&&m.uniforms.uLogoTile){wovenSaved.push([m,m.uniforms.uLogoTile.value.w,m.uniforms.uLogoTile.value.clone(),m.uniforms.uLogoBox.value.clone()]); m.uniforms.uLogoTile.value.w=(typeof FIBRE_LOGO!=='undefined'&&FIBRE_LOGO.pdfStrength)||1;}});
+
   // Composition d'une chaise : centrée sur la chaise seule (ombre exclue), hauteur 80 % du cadre
   function composeChair(srcCanvas){
     const w=srcCanvas.width, h=srcCanvas.height;
@@ -2504,12 +2508,14 @@ async function generateExportPDF(){
     const s=(SHOT_H*0.80)/(y1-y0+1);
     const cx=(x0+x1+1)/2*s, cy=(y0+y1+1)/2*s;
     o.drawImage(srcCanvas,SHOT_W/2-cx,SHOT_H/2-cy,w*s,h*s);
+   
     return out.toDataURL('image/jpeg',0.9);
   }
   function composeDetail(srcCanvas){
     const out=document.createElement('canvas'); out.width=SHOT_W; out.height=SHOT_H;
     const o=out.getContext('2d'); o.fillStyle=CREME; o.fillRect(0,0,SHOT_W,SHOT_H);
     o.drawImage(srcCanvas,0,0,SHOT_W,SHOT_H);
+   
     return out.toDataURL('image/jpeg',0.88);
   }
   function grabCanvas(){
@@ -2566,6 +2572,8 @@ async function generateExportPDF(){
     ];
     // Dossier sans tressage (Harpe, Résille) : on montre le motif du dossier de face
     if(S.shape==='harpe' || S.shape==='resille') DETAILS[1]={rot:[0,0], tx:0, ty:0.80, tz:-0.35, d:[0,0.05,1], fov:20};
+    // Gros plans : filigrane tissé plus petit, pour qu'il entre en entier dans le cadre
+    wovenSaved.forEach(([m])=>{ m.uniforms.uLogoTile.value.x*=0.4; m.uniforms.uLogoTile.value.y*=0.4; m.uniforms.uLogoBox.value.multiplyScalar(0.4); });
     for(const p of DETAILS){
       const rot=p.rot||[0.08,0.6];
       group.rotation.set(rot[0],rot[1],0); group.updateMatrixWorld(true);
@@ -2578,6 +2586,7 @@ async function generateExportPDF(){
       details.push(composeDetail(await renderNow(det)));
     }
   } finally {
+    wovenSaved.forEach(([m,w,t,b])=>{m.uniforms.uLogoTile.value.copy(t); m.uniforms.uLogoTile.value.w=w; m.uniforms.uLogoBox.value.copy(b);});
     scene.background=savedBg; scene.fog=savedFog;
     renderer.setClearColor(savedClear,savedClearAlpha);
     group.rotation.copy(savedRotation);
