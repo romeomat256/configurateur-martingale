@@ -142,7 +142,6 @@ header{position:fixed;top:0;left:0;right:0;z-index:200;height:var(--hdr);display
 
 .viewport{flex:1;position:relative;overflow:hidden;background:var(--bg-warm);}
 #cv3d{display:block;width:100%;height:100%;touch-action:none;}
-#wm-overlay{position:absolute;inset:-50%;pointer-events:none;transform:rotate(-28deg);background-repeat:repeat;opacity:.13;z-index:2;}
 .vp-info{position:absolute;bottom:80px;left:36px;pointer-events:none;}
 .vp-bread{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-low);margin-bottom:8px;}
 .vp-model{font-family:'Cormorant Garamond',serif;font-size:40px;font-weight:300;color:var(--ink);line-height:1;letter-spacing:-.01em;}
@@ -422,7 +421,6 @@ button.acc-header{width:100%;border:0;background:transparent;text-align:left;fon
 
   <div class="viewport" style="padding-bottom:var(--bar);">
     <canvas id="cv3d"></canvas>
-    <div id="wm-overlay" aria-hidden="true"></div>
     <div id="loading-overlay" class="loading-overlay initial-load" role="status" aria-live="polite" aria-hidden="false">
       <div class="loading-spinner" aria-hidden="true"></div>
       <span class="loading-lbl">Chargement du modèle…</span>
@@ -1597,20 +1595,6 @@ function touchDistance(touches){
   return Math.sqrt(dx*dx+dy*dy);
 }
 
-// Filigrane d'écran : logo répété en diagonale sur toute la vue 3D (présent sur chaque capture)
-(function(){
-  const im=new Image();
-  im.onload=()=>{
-    const lw=230, lh=Math.round(lw*im.height/im.width), tw=lw*1.3, th=lh*2.4;
-    const c=document.createElement('canvas'); c.width=tw*2; c.height=th*2;
-    const x=c.getContext('2d');
-    [[tw/2,th/2],[tw*1.5,th/2],[0,th*1.5],[tw,th*1.5],[tw*2,th*1.5]].forEach(([cx,cy])=>x.drawImage(im,cx-lw/2,cy-lh/2,lw,lh));
-    const el=document.getElementById('wm-overlay');
-    if(el)el.style.backgroundImage='url('+c.toDataURL('image/png')+')';
-  };
-  im.src='textures/filigrane-martingale.png';
-})();
-
 function initThree(){
   const cv=document.getElementById('cv3d');
   renderer=new THREE.WebGLRenderer({canvas:cv,antialias:true,alpha:true});
@@ -2473,34 +2457,6 @@ async function generateExportPDF(){
   const SHOT_W=1000, SHOT_H=1250;              // format 4:5
   const views={}, details=[];
 
-  // Filigrane du PDF : logo Martingale répété en diagonale sur chaque photo, en plus du filigrane tissé
-  const wmLogo=await new Promise(res=>{const im=new Image();im.onload=()=>res(im);im.onerror=()=>res(null);im.src='textures/filigrane-martingale.png';});
-  // Version claire du logo : lisible aussi sur les brins foncés
-  let wmLight=null;
-  if(wmLogo){ wmLight=document.createElement('canvas'); wmLight.width=wmLogo.width; wmLight.height=wmLogo.height;
-    const lc=wmLight.getContext('2d'); lc.drawImage(wmLogo,0,0); lc.globalCompositeOperation='source-in'; lc.fillStyle='#FFFFFF'; lc.fillRect(0,0,wmLight.width,wmLight.height); }
-  // Référence du document, reprise dans le filigrane : une fuite remonte à la fiche d'origine
-  const wmRef=(()=>{const keys=['cat','shape','weave','c1','c2','c3','c4','c5'];const t=JSON.stringify(Object.fromEntries(keys.map(k=>[k,S[k]])));let h=2166136261;for(const c of t)h=Math.imul(h^c.charCodeAt(0),16777619);return 'MP-'+(h>>>0).toString(16).toUpperCase().padStart(8,'0');})();
-  const wmLine=(wmRef+(ent?' · '+ent:'')).toUpperCase();
-  function stampWatermark(o,W,H){
-    if(!wmLogo)return;
-    const lw=W*0.42, lh=lw*wmLogo.height/wmLogo.width, sx=lw*1.25, sy=lh*2.1;
-    const R=Math.hypot(W,H);
-    const fs=Math.round(W*0.022);
-    const pass=(img,alpha,dx,dy,color)=>{
-      o.save(); o.globalAlpha=alpha; o.translate(W/2+dx,H/2+dy); o.rotate(-28*Math.PI/180);
-      o.font='600 '+fs+'px Helvetica, Arial, sans-serif'; o.fillStyle=color; o.textAlign='center';
-      for(let row=0, y=-R; y<R; y+=sy, row++){
-        for(let x=-R+(row%2)*sx/2; x<R; x+=sx){
-          o.drawImage(img,x-lw/2,y-lh/2,lw,lh);
-          o.fillText(wmLine,x,y+lh*0.5+fs*1.2);
-        }
-      }
-      o.restore();
-    };
-    pass(wmLight,0.55,0,0,'#FFFFFF');          // clair : se lit sur les brins foncés
-    pass(wmLogo,0.42,2,2,'#1E1E1C');           // noir, léger décalage : se lit sur le crème et les brins clairs
-  }
   // Filigrane tissé plus marqué pendant les captures du PDF
   const wovenSaved=[];
   group.traverse(ob=>{const m=ob.material; if(m&&m.uniforms&&m.uniforms.uLogoTile){wovenSaved.push([m,m.uniforms.uLogoTile.value.w,m.uniforms.uLogoTile.value.clone(),m.uniforms.uLogoBox.value.clone()]); m.uniforms.uLogoTile.value.w=(typeof FIBRE_LOGO!=='undefined'&&FIBRE_LOGO.pdfStrength)||1;}});
@@ -2516,18 +2472,18 @@ async function generateExportPDF(){
     }
     const out=document.createElement('canvas'); out.width=SHOT_W; out.height=SHOT_H;
     const o=out.getContext('2d'); o.fillStyle=CREME; o.fillRect(0,0,SHOT_W,SHOT_H);
-    if(x1<0){ o.drawImage(srcCanvas,0,0,SHOT_W,SHOT_H); stampWatermark(o,SHOT_W,SHOT_H); return out.toDataURL('image/jpeg',0.9); }
+    if(x1<0){ o.drawImage(srcCanvas,0,0,SHOT_W,SHOT_H); return out.toDataURL('image/jpeg',0.9); }
     const s=(SHOT_H*0.80)/(y1-y0+1);
     const cx=(x0+x1+1)/2*s, cy=(y0+y1+1)/2*s;
     o.drawImage(srcCanvas,SHOT_W/2-cx,SHOT_H/2-cy,w*s,h*s);
-    stampWatermark(o,SHOT_W,SHOT_H);
+   
     return out.toDataURL('image/jpeg',0.9);
   }
   function composeDetail(srcCanvas){
     const out=document.createElement('canvas'); out.width=SHOT_W; out.height=SHOT_H;
     const o=out.getContext('2d'); o.fillStyle=CREME; o.fillRect(0,0,SHOT_W,SHOT_H);
     o.drawImage(srcCanvas,0,0,SHOT_W,SHOT_H);
-    stampWatermark(o,SHOT_W,SHOT_H);
+   
     return out.toDataURL('image/jpeg',0.88);
   }
   function grabCanvas(){
@@ -2584,8 +2540,8 @@ async function generateExportPDF(){
     ];
     // Dossier sans tressage (Harpe, Résille) : on montre le motif du dossier de face
     if(S.shape==='harpe' || S.shape==='resille') DETAILS[1]={rot:[0,0], tx:0, ty:0.80, tz:-0.35, d:[0,0.05,1], fov:20};
-    // Gros plans : filigrane tissé deux fois plus petit, pour qu'il entre en entier dans le cadre
-    wovenSaved.forEach(([m])=>{ m.uniforms.uLogoTile.value.x*=0.5; m.uniforms.uLogoTile.value.y*=0.5; m.uniforms.uLogoBox.value.multiplyScalar(0.5); });
+    // Gros plans : filigrane tissé plus petit, pour qu'il entre en entier dans le cadre
+    wovenSaved.forEach(([m])=>{ m.uniforms.uLogoTile.value.x*=0.4; m.uniforms.uLogoTile.value.y*=0.4; m.uniforms.uLogoBox.value.multiplyScalar(0.4); });
     for(const p of DETAILS){
       const rot=p.rot||[0.08,0.6];
       group.rotation.set(rot[0],rot[1],0); group.updateMatrixWorld(true);

@@ -635,7 +635,7 @@ function getFibreLogoTexture(){
   return fibreLogoTex;
 }
 // Filigrane tissé : tailles en mm réels, converties en UV avec refUvMm de chaque tressage
-const FIBRE_LOGO = { on: true, tileMm: [215, 105], logoMm: 165, strength: 1.0, pdfStrength: 1.0 };
+const FIBRE_LOGO = { on: true, tileMm: [290, 135], logoMm: 235, strength: 1.0, pdfStrength: 1.0 };
 function fibreLogoUniforms(cfg){
   const mm = cfg.refUvMm || [100, 100];
   const L = FIBRE_LOGO;
