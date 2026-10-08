@@ -24,7 +24,7 @@ const FIBRE_SETTINGS = {
   // calculée depuis le masque. frontWrap : face avant raccordée à l'assise (prioritaire).
   // frontCenter : centre d'une croix, en UV de motif (ancien réglage, face avant centrée).
   maille: { weaveType:4, grid:[12.3,12.3], rough:0.86, relief:0.44, ao:0.34, env:1.08, pairs:1, refUvMm:[90.1,87.2], rawShapes:['tradition'],
-            fibreMap:'textures/maille-fibremap.png', frontWrap:true, frontCenter:[0.2857,0.5823], frontPeriod:[0.5,0.5] },
+            fibreMap:'textures/maille-fibremap.png', frontWrap:true, frontWrapCenter:[0.2857,0.3323], frontCenter:[0.2857,0.5823], frontPeriod:[0.5,0.5] },
 };
 
 const FIBRE_VERT = `
@@ -626,7 +626,7 @@ function prepareFibreGeometry(mesh, root, weaveId, shapeId){
     }
     // Face avant : frise centrée sur une rangée de motifs (toutes chaises, référence comprise)
     // Face avant raccordée à l'assise (le motif passe l'arête), sinon centrée sur une rangée de motifs
-    if(cfg.frontWrap) FibreCalibration.wrapFrontIslands(pos, uv, I ? I.array : null, xf, cfg.frontCenter, cfg.frontPeriod || [0.5,0.5]);
+    if(cfg.frontWrap) FibreCalibration.wrapFrontIslands(pos, uv, I ? I.array : null, xf, cfg.frontWrapCenter || cfg.frontCenter, cfg.frontPeriod || [0.5,0.5]);
     else if(cfg.frontCenter) FibreCalibration.alignFrontIslands(pos, uv, I ? I.array : null, xf, cfg.frontCenter, cfg.frontPeriod || [0.5,0.5]);
   }catch(err){
     console.warn('Calibrage fibre impossible, UV brutes utilisées.', err);
