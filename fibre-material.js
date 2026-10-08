@@ -292,7 +292,7 @@ const FIBRE_FRAG = `
       float inside = step(0.0, luv.x) * step(luv.x, 1.0) * step(0.0, luv.y) * step(luv.y, 1.0);
       float la = texture2D(uLogo, luv).a * inside;
       float lum = dot(base, vec3(0.299, 0.587, 0.114));
-      vec3 ink = lum > 0.42 ? vec3(0.07, 0.07, 0.065) : vec3(0.95, 0.94, 0.91);   // noir sur brins clairs, blanc sur brins foncés : lisible sur toute capture
+      vec3 ink = vec3(1.0);   // filigrane blanc
       base = mix(base, ink, la * uLogoTile.w);
     }
 
