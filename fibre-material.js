@@ -472,7 +472,7 @@ const FIBRE_FRAG = `
    * que l'assise ; verticalement, le motif reprend là où l'assise s'arrête.
    * S'applique après le calibrage (xf contient déjà la transformation de l'assise).
    */
-  function wrapFrontIslands(pos, uv, idx, xf){
+  function wrapFrontIslands(pos, uv, idx, xf, target, period){
     const res = analyzeIslands(pos, uv, idx);
     const nv = pos.length/3;
     const seat = res.islands.filter(i=>i.role==='seat').sort((a,b)=>b.area-a.area)[0];
@@ -524,6 +524,24 @@ const FIBRE_FRAG = `
         xf[4*v]=SU; xf[4*v+1]=SV; xf[4*v+2]=OU; xf[4*v+3]=OV;
       }
       done++;
+    }
+    // Recentrage : on décale ensemble l'assise et la face avant (le raccord reste continu)
+    // pour qu'une rangée entière de motifs tombe au milieu de la face avant, sans motif coupé à l'arête.
+    if(done && target && period){
+      const big = fronts.slice().sort((a,b)=>b.area-a.area)[0];
+      let u0=1e9,u1=-1e9,v0=1e9,v1=-1e9;
+      for(let v=0; v<nv; v++){
+        if(res.vertexIsland(v)!==big.root) continue;
+        const u2 = uv[2*v]*xf[4*v] + xf[4*v+2], v2 = uv[2*v+1]*xf[4*v+1] + xf[4*v+3];
+        u0=Math.min(u0,u2); u1=Math.max(u1,u2); v0=Math.min(v0,v2); v1=Math.max(v1,v2);
+      }
+      const wrap = (x,p) => x - p*Math.round(x/p);
+      const du = wrap(target[0]-(u0+u1)/2, period[0]), dv = wrap(target[1]-(v0+v1)/2, period[1]);
+      const roots = new Set([seatRoot].concat(fronts.map(f=>f.root)));
+      for(let v=0; v<nv; v++){
+        if(!roots.has(res.vertexIsland(v))) continue;
+        xf[4*v+2] += du; xf[4*v+3] += dv;
+      }
     }
     return done;
   }
@@ -608,7 +626,7 @@ function prepareFibreGeometry(mesh, root, weaveId, shapeId){
     }
     // Face avant : frise centrée sur une rangée de motifs (toutes chaises, référence comprise)
     // Face avant raccordée à l'assise (le motif passe l'arête), sinon centrée sur une rangée de motifs
-    if(cfg.frontWrap) FibreCalibration.wrapFrontIslands(pos, uv, I ? I.array : null, xf);
+    if(cfg.frontWrap) FibreCalibration.wrapFrontIslands(pos, uv, I ? I.array : null, xf, cfg.frontCenter, cfg.frontPeriod || [0.5,0.5]);
     else if(cfg.frontCenter) FibreCalibration.alignFrontIslands(pos, uv, I ? I.array : null, xf, cfg.frontCenter, cfg.frontPeriod || [0.5,0.5]);
   }catch(err){
     console.warn('Calibrage fibre impossible, UV brutes utilisées.', err);
