@@ -20,10 +20,11 @@
     }
   }catch(err){ console.warn('Comptes indisponibles', err); }
 
+  var CRM_LEAD_URL = 'https://hduxtygzhesmclxanocj.supabase.co/functions/v1/lead-configurateur';
   function $(id){ return document.getElementById(id); }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
   function redirectUrl(){ return location.origin + location.pathname; }
-  function profilComplet(){ return !!(profil && profil.etablissement && profil.terrasse && profil.telephone); }
+  function profilComplet(){ return !!(profil && profil.metier && profil.etablissement && profil.terrasse && profil.telephone); }
 
   // ── Fenêtre de connexion ──
   function injecter(){
@@ -52,8 +53,11 @@
         '<div id="acct-step-profil" hidden>'+
           '<div class="m-ey">Votre fiche professionnelle</div>'+
           '<h2>Bienvenue <em>chez Martingale.</em></h2>'+
-          '<p class="acct-intro">Trois informations pour préparer vos fiches et vos devis.</p>'+
+          '<p class="acct-intro">Quelques informations pour préparer vos fiches et vos devis.</p>'+
           '<form id="acct-profil-form" onsubmit="event.preventDefault();MartingaleComptes.enregistrerProfil()">'+
+            '<div class="fg"><span class="fl" id="acct-metier-l">Vous êtes *</span><div class="acct-metiers" role="radiogroup" aria-labelledby="acct-metier-l">'+
+              ['Restaurateur','Hôtelier','Décorateur','Architecte','Autre'].map(function(m,i){ return '<label><input type="radio" name="acct-metier" value="'+m+'" required><span>'+m+'</span></label>'; }).join('')+
+            '</div></div>'+
             '<div class="fg"><label class="fl" for="acct-etab">Nom de l\'établissement *</label><input class="fi" id="acct-etab" required autocomplete="organization" placeholder="Restaurant, hôtel, café…"></div>'+
             '<div class="fg acct-range"><label class="fl" for="acct-terrasse">Taille de votre terrasse * <output id="acct-terrasse-val">40 places</output></label>'+
             '<input type="range" id="acct-terrasse" min="1" max="150" step="1" value="40" oninput="MartingaleComptes.terrasse(this.value)">'+
@@ -75,6 +79,7 @@
     $('acct-step-profil').hidden = etape!=='profil';
     if(etape==='profil' && profil){
       $('acct-etab').value = profil.etablissement || '';
+      Array.prototype.forEach.call(document.querySelectorAll('input[name=acct-metier]'), function(r){ r.checked = r.value===profil.metier; });
       $('acct-terrasse').value = parseInt(profil.terrasse,10) || 40; afficherTerrasse($('acct-terrasse').value);
       $('acct-tel').value = profil.telephone || '';
     }
@@ -156,6 +161,7 @@
     if(!client || !session) return;
     var maj = {
       nom: profil && profil.nom ? profil.nom : null,
+      metier: (document.querySelector('input[name=acct-metier]:checked')||{}).value || null,
       etablissement: $('acct-etab').value.trim(),
       terrasse: $('acct-terrasse').value,
       telephone: $('acct-tel').value.trim(),
@@ -167,6 +173,7 @@
     profil = r.data || Object.assign(profil||{}, maj);
     status('acct-status-profil','');
     fermer(); majEntete(); preRemplir(); lancerAttente();
+    versCrm('inscription');
   }
 
   function ok(){ return !!(session && profilComplet() && !(profil && profil.bloque)); }
@@ -210,8 +217,19 @@
   async function noter(action, reference, details){
     if(!client || !session || typeof S==='undefined') return;
     try{
-      await client.from('configurations').insert({ user_id:session.user.id, action:action, reference:reference||null,
-        config:{shape:S.shape,weave:S.weave,c1:S.c1,c2:S.c2,c3:S.c3,c4:S.c4,c5:S.c5}, details:details||null });
+      var r = await client.from('configurations').insert({ user_id:session.user.id, action:action, reference:reference||null,
+        config:{shape:S.shape,weave:S.weave,c1:S.c1,c2:S.c2,c3:S.c3,c4:S.c4,c5:S.c5}, details:details||null }).select('id').single();
+      versCrm(action, r.data && r.data.id);
+    }catch(e){}
+  }
+
+  // Remonte le client dans le CRM Martingale (catégorie « Client configurateur »)
+  function versCrm(evenement, configId){
+    if(!session) return;
+    try{
+      fetch(CRM_LEAD_URL, { method:'POST', keepalive:true,
+        headers:{ 'Content-Type':'application/json', 'Authorization':'Bearer '+session.access_token },
+        body: JSON.stringify({ evenement:evenement, config_id: configId||null }) }).catch(function(){});
     }catch(e){}
   }
 

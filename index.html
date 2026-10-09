@@ -30,7 +30,7 @@
 <script src="./bois-material.js"></script>
 <script src="./analytics.js"></script>
 <script src="./vendor/supabase.js"></script>
-<script src="./comptes.js?v=5"></script>
+<script src="./comptes.js?v=6"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -547,6 +547,12 @@ body:not(.acct-ok) #step-1 .step-head::after,body:not(.acct-ok) #step-2 .step-he
 .acct-status{margin-top:12px;font-size:12px;line-height:1.5;color:var(--olive);}
 .acct-status.err{color:#923b30;}
 .acct-legal{margin-top:16px;font-size:11px;line-height:1.5;color:var(--ink-low);}
+.acct-metiers{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px;}
+.acct-metiers label{cursor:pointer;}
+.acct-metiers input{position:absolute;opacity:0;pointer-events:none;}
+.acct-metiers span{display:inline-block;padding:8px 14px;border:1px solid rgba(64,63,33,.35);border-radius:999px;font-size:13px;color:#403F21;transition:background .15s,color .15s;}
+.acct-metiers input:checked+span{background:#403F21;color:#F3F1EA;border-color:#403F21;}
+.acct-metiers input:focus-visible+span{outline:2px solid #403F21;outline-offset:2px;}
 .acct-range{margin-bottom:14px;}
 .acct-range .fl{display:flex;justify-content:space-between;align-items:baseline;}
 .acct-range output{font-weight:600;color:#403F21;font-size:14px;}
