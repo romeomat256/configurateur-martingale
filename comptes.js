@@ -8,6 +8,8 @@
   var SUPABASE_URL = 'https://hykwzwvfqohkakyrgwyf.supabase.co';
   var SUPABASE_KEY = 'sb_publishable_AzkM2sDdJe5NtbrbI6-z_A_h-J8fkO6';
   var CONFIG_KEY = 'martingale-config-en-cours';
+  // ID client Google (public). Avec lui, Google affiche « Martingale » et config.martingaleparis.fr, jamais l'adresse Supabase.
+  var GOOGLE_CLIENT_ID = '';
 
   var client = null, session = null, profil = null, pending = null, ready = false;
   try{
@@ -34,7 +36,8 @@
           '<div class="m-ey">Espace professionnel</div>'+
           '<h2 id="acct-title">Composez <em>votre chaise.</em></h2>'+
           '<p class="acct-intro">Créez votre compte gratuit pour choisir le tressage et les couleurs, utiliser le Conseiller Martingale et recevoir votre fiche.</p>'+
-          '<button type="button" class="acct-google" onclick="MartingaleComptes.google()">'+
+          '<div id="acct-gsi" class="acct-gsi"></div>'+
+          '<button type="button" class="acct-google" id="acct-google-fallback" onclick="MartingaleComptes.google()">'+
             '<svg width="18" height="18" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.3 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.3 0-9.7-3.3-11.3-8l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg>'+
             '<span>Continuer avec Google</span></button>'+
           '<div class="acct-or"><span>ou</span></div>'+
@@ -78,7 +81,8 @@
       $('acct-news').checked = !!profil.newsletter;
     }
     $('acct-overlay').classList.add('open');
-    setTimeout(function(){ var f=$('acct-overlay').querySelector(etape==='login'?'.acct-google':'#acct-nom'); if(f) f.focus(); }, 50);
+    if(etape==='login') boutonGoogle();
+    setTimeout(function(){ var f=$('acct-overlay').querySelector(etape==='login'?'#acct-email':'#acct-nom'); if(f) f.focus(); }, 50);
   }
   function fermer(){ var o=$('acct-overlay'); if(o) o.classList.remove('open'); }
   function status(id, txt, err){ var el=$(id); if(el){ el.textContent=txt||''; el.classList.toggle('err', !!err); } }
@@ -89,6 +93,41 @@
   }
   function lireConfig(){
     try{ var raw=sessionStorage.getItem(CONFIG_KEY); if(!raw) return null; sessionStorage.removeItem(CONFIG_KEY); return JSON.parse(raw); }catch(e){ return null; }
+  }
+
+  // ── Bouton « Continuer avec Google » officiel (Google Identity Services) ──
+  var gsiCharge=null, nonceBrut=null;
+  function chargerGsi(){
+    if(gsiCharge) return gsiCharge;
+    gsiCharge=new Promise(function(res,rej){
+      var sc=document.createElement('script'); sc.src='https://accounts.google.com/gsi/client'; sc.async=true;
+      sc.onload=function(){res();}; sc.onerror=function(){rej(new Error('gsi'));}; document.head.appendChild(sc);
+    });
+    return gsiCharge;
+  }
+  async function sha256(txt){
+    var buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(txt));
+    return Array.from(new Uint8Array(buf)).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+  }
+  async function boutonGoogle(){
+    var zone=$('acct-gsi'), repli=$('acct-google-fallback');
+    if(!GOOGLE_CLIENT_ID || !zone){ if(zone) zone.hidden=true; if(repli) repli.hidden=false; return; }
+    try{
+      await chargerGsi();
+      nonceBrut=Array.from(crypto.getRandomValues(new Uint8Array(16))).map(function(b){return b.toString(16).padStart(2,'0');}).join('');
+      var nonceHash=await sha256(nonceBrut);
+      google.accounts.id.initialize({ client_id:GOOGLE_CLIENT_ID, callback:retourGoogle, nonce:nonceHash, use_fedcm_for_prompt:true, itp_support:true, context:'signin', ux_mode:'popup' });
+      zone.innerHTML='';
+      google.accounts.id.renderButton(zone,{ type:'standard', theme:'outline', size:'large', shape:'pill', text:'continue_with', logo_alignment:'center', width:Math.min(380, zone.clientWidth||380), locale:'fr' });
+      zone.hidden=false; if(repli) repli.hidden=true;
+    }catch(err){ zone.hidden=true; if(repli) repli.hidden=false; }
+  }
+  async function retourGoogle(rep){
+    if(!client || !rep || !rep.credential) return;
+    status('acct-status','Connexion en cours…');
+    var r=await client.auth.signInWithIdToken({ provider:'google', token:rep.credential, nonce:nonceBrut });
+    if(r.error){ status('acct-status','Connexion Google impossible : '+r.error.message,true); return; }
+    status('acct-status','');
   }
 
   async function google(){
