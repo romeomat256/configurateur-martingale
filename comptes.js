@@ -210,6 +210,7 @@
     if(!profil) return;
     var set=function(id,v){ var e=$(id); if(e && !e.value && v) e.value=v; };
     set('fi-n', profil.nom); set('fi-p', profil.etablissement); set('fi-e', profil.email || (session&&session.user.email)); set('fi-t', profil.telephone);
+    var q=$('fi-q'), tp=parseInt(profil.terrasse,10); if(q && tp && !q.dataset.touche && typeof qtySync==='function'){ q.dataset.touche='1'; qtySync(tp,'init'); }
     set('ep-ent', profil.etablissement); set('ep-email', profil.email || (session&&session.user.email));
   }
 

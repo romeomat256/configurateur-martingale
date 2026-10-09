@@ -30,7 +30,7 @@
 <script src="./bois-material.js"></script>
 <script src="./analytics.js"></script>
 <script src="./vendor/supabase.js"></script>
-<script src="./comptes.js?v=6"></script>
+<script src="./comptes.js?v=7"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -563,6 +563,19 @@ body:not(.acct-ok) #step-1 .step-head::after,body:not(.acct-ok) #step-2 .step-he
 .acct-check input{margin-top:2px;}
 .fl span{color:var(--ink-low);font-weight:300;}
 @media(max-width:767px){.acct-modal{padding:32px 20px 24px;}.acct-modal h2{font-size:32px;}.acct-modal .frow{flex-direction:column;gap:0;}.hdr-r{display:flex!important;align-items:center;}}
+
+/* Quantité : grand chiffre éditable + curseur */
+.qty-e{margin-top:4px;}
+.qty-e-num{display:flex;align-items:baseline;gap:10px;margin-top:4px;}
+.qty-e-num input{font-family:var(--f-display,'Bricolage Grotesque',sans-serif);font-weight:500;font-size:56px;letter-spacing:-0.06em;line-height:1;color:#403F21;border:none;border-bottom:1px solid transparent;background:transparent;padding:0;width:3.2ch;min-width:0;-moz-appearance:textfield;}
+.qty-e-num input:focus{outline:none;border-bottom-color:#403F21;}
+.qty-e-num input::-webkit-outer-spin-button,.qty-e-num input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0;}
+.qty-e-num span{font-family:var(--f-italic,'Cormorant Garamond',serif);font-style:italic;font-weight:500;font-size:22px;}
+.qty-e input[type=range]{width:100%;accent-color:#403F21;height:24px;margin:8px 0 0;cursor:pointer;}
+.qty-e input[type=range]:focus{outline:none;}
+.qty-e-bornes{display:flex;justify-content:space-between;font-size:11px;opacity:.6;}
+.qty-e-eq{font-size:12.5px;margin:8px 0 0;opacity:.8;}
+.qty-e-eq b{font-weight:600;}
 </style>
 </head>
 <body>
@@ -679,9 +692,13 @@ body:not(.acct-ok) #step-1 .step-head::after,body:not(.acct-ok) #step-2 .step-he
       <div class="fg"><label class="fl" for="fi-p">Établissement</label><input class="fi" id="fi-p" autocomplete="organization" placeholder="Restaurant, hôtel…"></div>
      </div>
      <div class="fg"><label class="fl" for="fi-e">E-mail *</label><input required class="fi" id="fi-e" type="email" autocomplete="email" placeholder="vous@entreprise.fr"></div>
-     <div class="frow">
-      <div class="fg"><label class="fl" for="fi-t">Téléphone *</label><input required class="fi" id="fi-t" type="tel" autocomplete="tel" placeholder="06 00 00 00 00"></div>
-      <div class="fg"><label class="fl" for="fi-q">Quantité souhaitée *</label><input required class="fi" id="fi-q" type="number" min="1" step="1" placeholder="Ex. 24"></div>
+     <div class="fg"><label class="fl" for="fi-t">Téléphone *</label><input required class="fi" id="fi-t" type="tel" autocomplete="tel" placeholder="06 00 00 00 00"></div>
+     <div class="fg qty-e">
+      <label class="fl" for="fi-q">Nombre de chaises *</label>
+      <div class="qty-e-num"><input required id="fi-q" type="number" inputmode="numeric" min="1" max="2000" step="1" value="40" oninput="qtySync(this.value,'num')" aria-describedby="qty-e-eq"><span>chaises</span></div>
+      <input type="range" id="fi-q-range" min="1" max="150" step="1" value="40" oninput="qtySync(this.value,'range')" aria-label="Régler le nombre de chaises">
+      <div class="qty-e-bornes"><span>1</span><span>150 chaises et plus</span></div>
+      <p class="qty-e-eq" id="qty-e-eq"></p>
      </div>
      <div class="fg"><label class="fl" for="fi-message">Votre projet <span>(facultatif)</span></label><textarea class="fi" id="fi-message" rows="2" placeholder="Lieu de livraison, délai souhaité, précisions…"></textarea></div>
      <button class="fsub" type="submit">Demander mon devis <span>→</span></button>
@@ -3009,6 +3026,20 @@ openStep(0);updateCfgSummary();
 // Les textures de motif arrivent en différé : on recalcule les vignettes quelques fois au démarrage
 [700,2500,6000].forEach(function(t){setTimeout(renderWeaveThumbs,t);});
 if(window.MartingaleComptes)MartingaleComptes.init();
+
+// Quantité : le chiffre et le curseur restent synchronisés
+function qtySync(v,src){
+  var n=Math.max(0,parseInt(v,10)||0), num=document.getElementById('fi-q'), rg=document.getElementById('fi-q-range'), eq=document.getElementById('qty-e-eq');
+  if(src!=='num'&&num) num.value=n;
+  if(src!=='range'&&rg) rg.value=Math.min(150,Math.max(1,n||1));
+  if(num) num.style.width=(Math.max(1,String(num.value||'').length)*0.92+0.15)+'ch';
+  if(eq){
+    if(n<2){ eq.innerHTML=''; return; }
+    var t2=Math.floor(n/2), t4=Math.floor(n/4);
+    eq.innerHTML='Soit environ <b>'+t2+(t2>1?' tables':' table')+' de deux</b>'+(t4>=1?' ou '+t4+(t4>1?' tables':' table')+' de quatre':'')+'.';
+  }
+}
+document.addEventListener('DOMContentLoaded',function(){var q=document.getElementById('fi-q');qtySync(q?q.value:40,'num');});
 </script>
 <div class="export-overlay" id="export-overlay">
   <div class="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-title">
