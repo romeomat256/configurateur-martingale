@@ -29,6 +29,8 @@
 <script src="./fibre-material.js"></script>
 <script src="./bois-material.js"></script>
 <script src="./analytics.js"></script>
+<script src="./vendor/supabase.js"></script>
+<script src="./comptes.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -521,6 +523,32 @@ header::after{content:'';position:absolute;left:40px;right:40px;bottom:0;height:
  .devis-bar{display:none;}
  .panel-actions{display:flex;}
 }
+
+/* ── Comptes ── */
+.hdr-r .acct-name{font-family:var(--f-display);font-weight:500;font-size:12px;margin-right:14px;}
+.acct-link{border:0;background:none;padding:0;font-size:12px;font-weight:500;text-decoration:underline;text-underline-offset:3px;cursor:pointer;color:var(--ink);}
+body:not(.acct-ok) #step-1 .step-edit,body:not(.acct-ok) #step-2 .step-edit{display:none;}
+body:not(.acct-ok) #step-1 .step-head::after,body:not(.acct-ok) #step-2 .step-head::after{content:'Avec votre compte';font-size:11px;color:var(--ink-low);margin-left:10px;}
+.acct-overlay{display:none;position:fixed;inset:0;z-index:500;background:rgba(22,22,18,.55);backdrop-filter:blur(4px);align-items:center;justify-content:center;padding:20px;overflow-y:auto;}
+.acct-overlay.open{display:flex;}
+.acct-modal{position:relative;background:var(--white);width:460px;max-width:100%;padding:40px 40px 32px;margin:auto;}
+.acct-modal .m-cls{position:absolute;top:12px;right:14px;width:36px;height:36px;font-size:22px;background:none;border:0;cursor:pointer;color:var(--ink-low);}
+.acct-modal h2{font-family:var(--f-display);font-weight:500;font-size:40px;letter-spacing:-.05em;line-height:.98;margin-top:8px;}
+.acct-modal h2 em{font-family:var(--f-italic);font-style:italic;font-weight:500;letter-spacing:-.01em;}
+.acct-intro{margin:12px 0 22px;font-size:13px;line-height:1.5;}
+.acct-google{width:100%;display:flex;align-items:center;justify-content:center;gap:10px;border:1px solid var(--ink);border-radius:40px;background:var(--white);padding:13px;font-size:14px;font-weight:500;cursor:pointer;}
+.acct-google:hover{background:var(--perle);}
+.acct-or{display:flex;align-items:center;gap:12px;margin:18px 0;color:var(--ink-low);font-size:12px;}
+.acct-or::before,.acct-or::after{content:'';flex:1;height:1px;background:var(--rule);}
+.acct-modal .fi{margin-bottom:14px;}
+.acct-submit{width:100%;margin-top:4px;}
+.acct-status{margin-top:12px;font-size:12px;line-height:1.5;color:var(--olive);}
+.acct-status.err{color:#923b30;}
+.acct-legal{margin-top:16px;font-size:11px;line-height:1.5;color:var(--ink-low);}
+.acct-check{display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.4;margin:4px 0 16px;}
+.acct-check input{margin-top:2px;}
+.fl span{color:var(--ink-low);font-weight:300;}
+@media(max-width:767px){.acct-modal{padding:32px 20px 24px;}.acct-modal h2{font-size:32px;}.acct-modal .frow{flex-direction:column;gap:0;}.hdr-r{display:flex!important;align-items:center;}}
 </style>
 </head>
 <body>
@@ -1597,6 +1625,7 @@ function buildColors(){
 // ── Étapes 01 Structure, 02 Tressage, 03 Couleurs ──
 var openStepIdx=-1;
 function openStep(i){
+  if(i>0&&window.MartingaleComptes&&!MartingaleComptes.ok()){MartingaleComptes.exiger(function(){openStep(i);});return;}
   openStepIdx=(openStepIdx===i&&i!==2)?-1:i;
   for(var k=0;k<3;k++){
     var el=document.getElementById('step-'+k);if(!el)continue;
@@ -1705,6 +1734,7 @@ function syncQuoteLayout(){
 }
 window.addEventListener('resize',syncQuoteLayout);
 function openModal(){
+ if(window.MartingaleComptes&&!MartingaleComptes.ok()){MartingaleComptes.exiger(openModal);return;}
  settleEffects();
  syncQuoteLayout();
  const sh=SHAPES[S.cat].find(x=>x.id===S.shape);
@@ -1718,6 +1748,7 @@ function openModal(){
  renderer.render(scene,camera);
  document.getElementById('quote-preview').src=renderer.domElement.toDataURL('image/png');
  document.getElementById('quote-status').textContent='';
+ if(window.MartingaleComptes)MartingaleComptes.preRemplir();
  activateDialog('overlay');
  MartingaleAnalytics.track('quote_opened',S);
 }
@@ -1725,6 +1756,7 @@ function closeModal(){dismissDialog('overlay');}
 function submitForm(event){
  event?.preventDefault();
  MartingaleAnalytics.track('quote_submit_attempt',{shape:S.shape,weave:S.weave,outcome:'unavailable'});
+ if(window.MartingaleComptes){const v=id=>(document.getElementById(id)||{}).value||'';MartingaleComptes.noter('devis',null,{nom:v('fi-n'),etablissement:v('fi-p'),email:v('fi-e'),telephone:v('fi-t'),quantite:v('fi-q'),message:v('fi-message')});}
  // Until delivery is connected, never claim that a request has been sent.
  document.getElementById('quote-status').textContent='L’envoi en ligne sera bientôt disponible. Contactez-nous par e-mail ou par téléphone ci-dessous pour recevoir votre devis.';
 }
@@ -2593,7 +2625,7 @@ function requestRender(){
  });
 }
 
-function openExportModal(){settleEffects();activateDialog('export-overlay');}
+function openExportModal(){if(window.MartingaleComptes&&!MartingaleComptes.ok()){MartingaleComptes.exiger(openExportModal);return;}if(window.MartingaleComptes)MartingaleComptes.preRemplir();settleEffects();activateDialog('export-overlay');}
 function closeExportModal(){dismissDialog('export-overlay');}
 
 async function generateExportPDF(){
@@ -2917,6 +2949,7 @@ async function generateExportPDF(){
 
     // ── Télécharger ──
   const filename = ('Martingale_'+nomStructure+'_'+nomMotif+'.pdf').replace(/\s+/g,'_');
+  if(window.MartingaleComptes)MartingaleComptes.noter('pdf',reference);
   pdf.save(filename);
   MartingaleAnalytics.track('pdf_generated',S);
 
@@ -2949,10 +2982,19 @@ try{
     for(const key of ['c1','c2','c3','c4','c5'])if(COLORS.some(x=>x.id===config[key]))S[key]=config[key];
   }
 }catch(error){console.warn('Lien de configuration invalide',error);}
+try{
+  const back=window.MartingaleComptes&&MartingaleComptes.lireConfig();
+  if(back){
+    if(SHAPES[S.cat].some(x=>x.id===back.shape))S.shape=back.shape;
+    if(WEAVES.some(x=>x.id===back.weave))S.weave=back.weave;
+    for(const key of ['c1','c2','c3','c4','c5'])if(COLORS.some(x=>x.id===back[key]))S[key]=back[key];
+  }
+}catch(error){}
 buildShapes();buildWeaves();buildColors();initThree();
 openStep(0);updateCfgSummary();
 // Les textures de motif arrivent en différé : on recalcule les vignettes quelques fois au démarrage
 [700,2500,6000].forEach(function(t){setTimeout(renderWeaveThumbs,t);});
+if(window.MartingaleComptes)MartingaleComptes.init();
 </script>
 <div class="export-overlay" id="export-overlay">
   <div class="export-modal" role="dialog" aria-modal="true" aria-labelledby="export-title">
