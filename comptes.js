@@ -9,7 +9,7 @@
   var SUPABASE_KEY = 'sb_publishable_AzkM2sDdJe5NtbrbI6-z_A_h-J8fkO6';
   var CONFIG_KEY = 'martingale-config-en-cours';
   // ID client Google (public). Avec lui, Google affiche « Martingale » et config.martingaleparis.fr, jamais l'adresse Supabase.
-  var GOOGLE_CLIENT_ID = '';
+  var GOOGLE_CLIENT_ID = '978712209854-oaakice5mh4bntbh5ekhm7eiu3b84jb4.apps.googleusercontent.com';
 
   var client = null, session = null, profil = null, pending = null, ready = false;
   try{
