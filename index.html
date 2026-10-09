@@ -30,7 +30,7 @@
 <script src="./bois-material.js"></script>
 <script src="./analytics.js"></script>
 <script src="./vendor/supabase.js"></script>
-<script src="./comptes.js?v=4"></script>
+<script src="./comptes.js?v=5"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
 :root{
@@ -547,6 +547,12 @@ body:not(.acct-ok) #step-1 .step-head::after,body:not(.acct-ok) #step-2 .step-he
 .acct-status{margin-top:12px;font-size:12px;line-height:1.5;color:var(--olive);}
 .acct-status.err{color:#923b30;}
 .acct-legal{margin-top:16px;font-size:11px;line-height:1.5;color:var(--ink-low);}
+.acct-range{margin-bottom:14px;}
+.acct-range .fl{display:flex;justify-content:space-between;align-items:baseline;}
+.acct-range output{font-weight:600;color:#403F21;font-size:14px;}
+.acct-range input[type=range]:focus{outline:none;}
+.acct-range input[type=range]{width:100%;accent-color:#403F21;height:28px;margin:4px 0 0;cursor:pointer;}
+.acct-range-bornes{display:flex;justify-content:space-between;font-size:11px;opacity:.6;}
 .acct-check{display:flex;gap:10px;align-items:flex-start;font-size:12px;line-height:1.4;margin:4px 0 16px;}
 .acct-check input{margin-top:2px;}
 .fl span{color:var(--ink-low);font-weight:300;}

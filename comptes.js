@@ -55,10 +55,9 @@
           '<p class="acct-intro">Trois informations pour préparer vos fiches et vos devis.</p>'+
           '<form id="acct-profil-form" onsubmit="event.preventDefault();MartingaleComptes.enregistrerProfil()">'+
             '<div class="fg"><label class="fl" for="acct-etab">Nom de l\'établissement *</label><input class="fi" id="acct-etab" required autocomplete="organization" placeholder="Restaurant, hôtel, café…"></div>'+
-            '<div class="fg"><label class="fl" for="acct-terrasse">Taille de votre terrasse *</label><select class="fi" id="acct-terrasse" required>'+
-              '<option value="" disabled selected>Choisir</option>'+
-              '<option>Moins de 20 places</option><option>20 à 40 places</option><option>40 à 80 places</option><option>Plus de 80 places</option><option>Pas de terrasse</option>'+
-            '</select></div>'+
+            '<div class="fg acct-range"><label class="fl" for="acct-terrasse">Taille de votre terrasse * <output id="acct-terrasse-val">40 places</output></label>'+
+            '<input type="range" id="acct-terrasse" min="1" max="150" step="1" value="40" oninput="MartingaleComptes.terrasse(this.value)">'+
+            '<div class="acct-range-bornes"><span>1</span><span>150 places</span></div></div>'+
             '<div class="fg"><label class="fl" for="acct-tel">Téléphone *</label><input class="fi" id="acct-tel" type="tel" required autocomplete="tel" pattern="[0-9+().\\s-]{8,}" placeholder="06 12 34 56 78"></div>'+
             '<button type="submit" class="fsub acct-submit">Commencer</button>'+
           '</form>'+
@@ -76,13 +75,14 @@
     $('acct-step-profil').hidden = etape!=='profil';
     if(etape==='profil' && profil){
       $('acct-etab').value = profil.etablissement || '';
-      $('acct-terrasse').value = profil.terrasse || '';
+      $('acct-terrasse').value = parseInt(profil.terrasse,10) || 40; afficherTerrasse($('acct-terrasse').value);
       $('acct-tel').value = profil.telephone || '';
     }
     $('acct-overlay').classList.add('open');
     if(etape==='login') boutonGoogle();
     setTimeout(function(){ var f=$('acct-overlay').querySelector(etape==='login'?'#acct-email':'#acct-etab'); if(f) f.focus(); }, 50);
   }
+  function afficherTerrasse(v){ var o=$('acct-terrasse-val'); if(o) o.textContent = v + (v==1?' place':' places'); }
   function fermer(){ var o=$('acct-overlay'); if(o) o.classList.remove('open'); }
   function status(id, txt, err){ var el=$(id); if(el){ el.textContent=txt||''; el.classList.toggle('err', !!err); } }
 
@@ -237,6 +237,6 @@
     if(/access_token|error_description/.test(location.hash)) history.replaceState(null,'',location.pathname+location.search);
   }
 
-  window.MartingaleComptes = { exiger:exiger, ok:ok, fermer:fermer, google:google, lien:lien, enregistrerProfil:enregistrerProfil,
+  window.MartingaleComptes = { terrasse:afficherTerrasse, exiger:exiger, ok:ok, fermer:fermer, google:google, lien:lien, enregistrerProfil:enregistrerProfil,
     deconnexion:deconnexion, noter:noter, lireConfig:lireConfig, preRemplir:preRemplir, init:init };
 })();
