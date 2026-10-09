@@ -23,7 +23,7 @@
   function $(id){ return document.getElementById(id); }
   function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
   function redirectUrl(){ return location.origin + location.pathname; }
-  function profilComplet(){ return !!(profil && profil.nom && profil.etablissement); }
+  function profilComplet(){ return !!(profil && profil.etablissement && profil.terrasse && profil.telephone); }
 
   // ── Fenêtre de connexion ──
   function injecter(){
@@ -52,13 +52,14 @@
         '<div id="acct-step-profil" hidden>'+
           '<div class="m-ey">Votre fiche professionnelle</div>'+
           '<h2>Bienvenue <em>chez Martingale.</em></h2>'+
-          '<p class="acct-intro">Deux informations pour préparer vos fiches et vos devis.</p>'+
+          '<p class="acct-intro">Trois informations pour préparer vos fiches et vos devis.</p>'+
           '<form id="acct-profil-form" onsubmit="event.preventDefault();MartingaleComptes.enregistrerProfil()">'+
-            '<div class="frow"><div class="fg"><label class="fl" for="acct-nom">Nom et prénom *</label><input class="fi" id="acct-nom" required autocomplete="name"></div>'+
-            '<div class="fg"><label class="fl" for="acct-etab">Établissement *</label><input class="fi" id="acct-etab" required autocomplete="organization" placeholder="Restaurant, hôtel…"></div></div>'+
-            '<div class="frow"><div class="fg"><label class="fl" for="acct-tel">Téléphone</label><input class="fi" id="acct-tel" type="tel" autocomplete="tel"></div>'+
-            '<div class="fg"><label class="fl" for="acct-siret">SIRET <span>(facultatif)</span></label><input class="fi" id="acct-siret" inputmode="numeric"></div></div>'+
-            '<label class="acct-check"><input type="checkbox" id="acct-news"> Recevoir les nouveautés Martingale (nouvelles couleurs, collections). Désinscription en un clic.</label>'+
+            '<div class="fg"><label class="fl" for="acct-etab">Nom de l\'établissement *</label><input class="fi" id="acct-etab" required autocomplete="organization" placeholder="Restaurant, hôtel, café…"></div>'+
+            '<div class="fg"><label class="fl" for="acct-terrasse">Taille de votre terrasse *</label><select class="fi" id="acct-terrasse" required>'+
+              '<option value="" disabled selected>Choisir</option>'+
+              '<option>Moins de 20 places</option><option>20 à 40 places</option><option>40 à 80 places</option><option>Plus de 80 places</option><option>Pas de terrasse</option>'+
+            '</select></div>'+
+            '<div class="fg"><label class="fl" for="acct-tel">Téléphone *</label><input class="fi" id="acct-tel" type="tel" required autocomplete="tel" pattern="[0-9+().\\s-]{8,}" placeholder="06 12 34 56 78"></div>'+
             '<button type="submit" class="fsub acct-submit">Commencer</button>'+
           '</form>'+
           '<p class="acct-status" id="acct-status-profil" role="status"></p>'+
@@ -74,15 +75,13 @@
     $('acct-step-login').hidden = etape!=='login';
     $('acct-step-profil').hidden = etape!=='profil';
     if(etape==='profil' && profil){
-      $('acct-nom').value = profil.nom || '';
       $('acct-etab').value = profil.etablissement || '';
+      $('acct-terrasse').value = profil.terrasse || '';
       $('acct-tel').value = profil.telephone || '';
-      $('acct-siret').value = profil.siret || '';
-      $('acct-news').checked = !!profil.newsletter;
     }
     $('acct-overlay').classList.add('open');
     if(etape==='login') boutonGoogle();
-    setTimeout(function(){ var f=$('acct-overlay').querySelector(etape==='login'?'#acct-email':'#acct-nom'); if(f) f.focus(); }, 50);
+    setTimeout(function(){ var f=$('acct-overlay').querySelector(etape==='login'?'#acct-email':'#acct-etab'); if(f) f.focus(); }, 50);
   }
   function fermer(){ var o=$('acct-overlay'); if(o) o.classList.remove('open'); }
   function status(id, txt, err){ var el=$(id); if(el){ el.textContent=txt||''; el.classList.toggle('err', !!err); } }
@@ -156,11 +155,10 @@
   async function enregistrerProfil(){
     if(!client || !session) return;
     var maj = {
-      nom: $('acct-nom').value.trim(),
+      nom: profil && profil.nom ? profil.nom : null,
       etablissement: $('acct-etab').value.trim(),
-      telephone: $('acct-tel').value.trim() || null,
-      siret: $('acct-siret').value.replace(/\s+/g,'') || null,
-      newsletter: $('acct-news').checked,
+      terrasse: $('acct-terrasse').value,
+      telephone: $('acct-tel').value.trim(),
       maj_le: new Date().toISOString()
     };
     status('acct-status-profil','Enregistrement…');
