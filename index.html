@@ -2834,6 +2834,16 @@ async function generateExportPDF(){
   for(const c of configText) hash=Math.imul(hash^c.charCodeAt(0),16777619);
   const reference='MP-'+(hash>>>0).toString(16).toUpperCase().padStart(8,'0');
   const dateStr=new Date().toLocaleDateString('fr-FR').replace(/\//g,'.');
+  // Métadonnées lisibles par le CRM Martingale (import automatique de la fiche dans un devis).
+  // Le JSON est encodé en ASCII pur pour rester intact dans le dictionnaire Info du PDF.
+  try{
+    const slotsMeta=WEAVE_COLOR_SLOTS[S.weave]||[];
+    const gettersMeta={c1:getC1,c2:getC2,c3:getC3,c4:getC4,c5:getC5};
+    const colorsMeta=slotsMeta.map(slot=>{const c=gettersMeta[slot.key]?.();return c?{slot:slot.key,role:slot.role,id:c.id,name:c.name,hex:c.hex}:null;}).filter(Boolean);
+    const configMeta={v:1,ref:reference,date:new Date().toISOString().slice(0,10),cat:S.cat,shape:S.shape,shapeName:nomStructure,weave:S.weave,weaveName:nomMotif,colors:colorsMeta,ent,email};
+    const asciiJSON=JSON.stringify(configMeta).replace(/[\u007f-￿]/g,ch=>'\\u'+ch.charCodeAt(0).toString(16).padStart(4,'0'));
+    pdf.setProperties({title:'Martingale '+nomStructure+' '+nomMotif,author:'Martingale Paris',keywords:reference,subject:'MARTINGALE-CONFIG '+asciiJSON});
+  }catch(metaErr){console.warn('Métadonnées PDF non écrites',metaErr);}
   setType('display',13,INK);
   const refW=textWidth(reference+' · '+dateStr,13,-0.03);
   drawText(reference+' · '+dateStr,750-refW/0.75,61,'display',13,INK,-0.03);
