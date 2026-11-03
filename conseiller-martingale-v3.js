@@ -609,6 +609,14 @@
         let v = c.score + (rng() - 0.5) * 2 * alea;
         v -= 8 * (domVu[c.cols[0].id] || 0);
         c.cols.slice(1).forEach(x => { v -= 2 * (colVu[x.id] || 0); });
+        // Les dernières harmonies montrées (la plus récente d'abord) : on change d'idée à chaque fois
+        (opts.recents || []).forEach((r, k) => {
+          const w = k === 0 ? 1 : k === 1 ? 0.6 : 0.3;
+          if (r.dom && c.cols[0].id === r.dom) v -= 30 * w;
+          if (r.recette && c.recette === r.recette) v -= (c.recette === 'classique' ? 40 : 14) * w;
+          if (r.theme && c.theme === r.theme && !opts.memeTheme) v -= 10 * w;
+          if (r.cols) v -= c.cols.filter(x => r.cols.indexOf(x.id) >= 0).length * 6 * w;
+        });
         for (const p of pris) {
           if (p.cols[0].id === c.cols[0].id) v -= 30;
           const s = new Set(p.cols.map(x => x.id));
@@ -690,6 +698,8 @@
    * o.recette   identifiant de recette (voir RECETTES) pour ne garder qu'un type d'harmonie
    * o.n         nombre de propositions (4 par défaut)
    * o.graine    graine du hasard ; o.alea dose de hasard ; o.exclure clés déjà montrées
+   * o.recents   dernières harmonies montrées, la plus récente d'abord : [{dom, recette, theme, cols}]
+   *             (pour varier d'une proposition à la suivante quand on en demande une à la fois)
    */
   function recommander(o) {
     o = o || {};
@@ -709,7 +719,7 @@
       parDom[k] = (parDom[k] || 0) + 1; top.push(c);
       if (top.length >= 600) break;
     }
-    const choix = selectionner(top, o.n || 4, rngDe(o.graine), o.alea === undefined ? 10 : o.alea, o.exclure, { memeTheme: themes.length === 1 });
+    const choix = selectionner(top, o.n || 4, rngDe(o.graine), o.alea === undefined ? 10 : o.alea, o.exclure, { memeTheme: themes.length === 1, recents: (o.recents || []).slice(0, 3) });
     const nomsPris = new Set();
     return choix.map(x => finaliser(x, t, nomsPris));
   }

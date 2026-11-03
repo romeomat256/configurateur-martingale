@@ -575,7 +575,7 @@ header::after{content:'';position:absolute;left:40px;right:40px;bottom:0;height:
         </div>
         <div class="advisor-panel" id="advisor-panel">
           <div class="advisor-result" id="advisor-result"></div>
-          <button type="button" class="advisor-action" id="advisor-action" onclick="proposeAdvisorHarmony(true)">Proposer d'autres harmonies</button>
+          <button type="button" class="advisor-action" id="advisor-action" onclick="advisorStep(1)">Une autre harmonie</button>
         </div>
       </div>
     </section>
@@ -1228,7 +1228,6 @@ function buildWeaves(){
       pendingSeatFocus=S.weave!==w.id;S.weave=w.id;MartingaleAnalytics.track('weave_selected',S);
       advisorLast=null;
       advisorProposals=[];
-      advisorShownKeys=[];
       buildWeaves();buildColors();updateCfgSummary();rebuildMesh();
     };
     g.appendChild(card);
@@ -1240,8 +1239,7 @@ function buildWeaves(){
 // ── Accordéon couleurs ──
 var accState = { activeStep: 0, done: false };
 var advisorLast = null;
-var advisorProposals = [];
-var advisorShownKeys = [];
+var advisorProposals = [];   // historique des harmonies proposées pour ce tressage
 var advisorEngineReady = false;
 
 // Pas de choix d'ambiance à l'écran : le Conseiller pioche les meilleures harmonies de toutes les ambiances
@@ -1412,24 +1410,25 @@ function renderAdvisor(){
     return;
   }
   if(!advisorLast||!advisorProposals.length){result.innerHTML='';updateCfgSummary();return;}
-  var idx=advisorLast.proposalIdx, n=advisorProposals.length;
+  var idx=advisorLast.proposalIdx;
   var p=advisorProposals[idx]||{};
   var name=String(p.nom||advisorLast.name||'').split(' · ')[0];
-  var dots='';for(var i=0;i<n;i++)dots+='<i class="'+(i===idx?'on':'')+'"></i>';
   result.innerHTML=
-    '<div class="adv-head"><div style="flex:1"><div class="adv-count">Harmonie '+(idx+1)+' sur '+n+'</div><div class="adv-name">'+esc(name)+'</div></div>'+
+    '<div class="adv-head"><div style="flex:1"><div class="adv-count">Harmonie n°'+(idx+1)+(p.ambiance?' · '+esc(p.ambiance):'')+'</div><div class="adv-name">'+esc(name)+'</div></div>'+
     '<button type="button" class="adv-arrow" aria-label="Harmonie précédente" onclick="advisorStep(-1)"'+(idx===0?' disabled':'')+'>&#8249;</button>'+
     '<button type="button" class="adv-arrow" aria-label="Harmonie suivante" onclick="advisorStep(1)">&#8250;</button></div>'+
     (p.pourquoi?'<p class="adv-why">'+esc(p.pourquoi)+'</p>':'')+
     '<div class="acc-wrap">'+bandsHtml(getAccSteps(),-1,false)+'</div>'+
-    '<div class="adv-foot"><span class="adv-dots">'+dots+'</span><button type="button" class="adv-own" onclick="setColorMode(\'manual\')">Ajuster une couleur moi-même</button></div>';
+    '<div class="adv-foot"><span class="adv-count">'+(idx<advisorProposals.length-1?(advisorProposals.length-1-idx)+' déjà vue'+(advisorProposals.length-1-idx>1?'s':'')+' après celle-ci':'')+'</span><button type="button" class="adv-own" onclick="setColorMode(\'manual\')">Ajuster une couleur moi-même</button></div>';
   updateCfgSummary();
 }
+// Historique continu : « précédente » remonte dans les harmonies déjà vues, « suivante » revient
+// vers les plus récentes puis en crée une nouvelle, indépendante, quand on est au bout.
 function advisorStep(dir){
   if(!advisorLast)return proposeAdvisorHarmony();
   var idx=advisorLast.proposalIdx+dir;
   if(idx<0)return;
-  if(idx>=advisorProposals.length)return proposeAdvisorHarmony(true);
+  if(idx>=advisorProposals.length)return proposeAdvisorHarmony();
   applyAdvisorProposal(idx);
 }
 function setColorMode(mode){
@@ -1442,7 +1441,6 @@ function setAdvisorNuance(id){
   S.advisorNuance=advisorFamilyId(id);
   advisorLast=null;
   advisorProposals=[];
-  advisorShownKeys=[];
   S.advisorSpin=0;
   proposeAdvisorHarmony();
 }
@@ -1491,26 +1489,26 @@ function setAdvisorContour(colorId){
   applyTexture();
   buildColors();
 }
-function proposeAdvisorHarmony(fresh){
+function proposeAdvisorHarmony(){
   if(!initAdvisorEngine())return;
-  // Le moteur prépare 4 idées variées : on les parcourt avec les flèches, « Proposer d'autres harmonies » en prépare 4 nouvelles
-  if(!fresh&&advisorLast&&advisorProposals.length&&advisorLast.proposalIdx<advisorProposals.length-1){
-    applyAdvisorProposal(advisorLast.proposalIdx+1);
-    return;
-  }
-  var previousKeys=advisorProposals.map(function(p){return p.cle;});
-  advisorShownKeys=advisorShownKeys.concat(previousKeys).slice(-80);
-  advisorProposals=window.ConseillerMartingale.recommander({
+  // Une harmonie à la fois, jamais déjà vue, différente des dernières montrées
+  if(advisorProposals.length>200)advisorProposals=advisorProposals.slice(-150);
+  var recents=advisorProposals.slice(-3).reverse().map(function(p){
+    return {dom:p.couleurs&&p.couleurs.c1,recette:p.recette,theme:p.theme,cols:Object.keys(p.couleurs||{}).map(function(k){return p.couleurs[k];})};
+  });
+  var nouvelles=window.ConseillerMartingale.recommander({
     tressage:S.weave,
     famille:advisorFamilyId(S.advisorNuance),
-    n:4,
+    n:1,
     graine:'martingale-'+S.weave+'-'+advisorFamilyId(S.advisorNuance)+'-'+(S.advisorSpin||0),
     alea:10,
-    exclure:advisorShownKeys
+    exclure:advisorProposals.map(function(p){return p.cle;}),
+    recents:recents
   });
   S.advisorSpin=(S.advisorSpin||0)+1;
-  if(advisorProposals.length)applyAdvisorProposal(0);
-  else renderAdvisor();
+  if(!nouvelles.length){renderAdvisor();return;}
+  advisorProposals.push(nouvelles[0]);
+  applyAdvisorProposal(advisorProposals.length-1);
 }
 
 function getAccSteps() {
