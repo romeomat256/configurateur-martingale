@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Banc d'essai couleurs · Conseiller Martingale v3</title>
+<link rel="icon" href="assets/favicon.svg">
+<link rel="stylesheet" href="vendor/fonts.css">
+<script src="vendor/three.min.js"></script>
+<script src="weave-materials.js"></script>
+<script src="fibre-material.js"></script>
+<script src="conseiller-martingale-v3.js"></script>
+<style>
+:root{--olive:#4D5038;--creme:#F7F5F0;--ink:#1E1E1C;--mute:#7A7A72;--line:#E2DED4;--white:#FFFFFF;--ok:#3E7A4B;--ko:#B5443A;}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--creme);color:var(--ink);font-family:'Hanken Grotesk',system-ui,sans-serif;font-size:14px;line-height:1.45;}
+h1{font-family:'Cormorant Garamond',serif;font-weight:400;font-size:30px;margin:0;letter-spacing:.01em;}
+h1 em{font-style:italic;color:var(--olive);}
+header{position:sticky;top:0;z-index:5;background:rgba(247,245,240,.96);backdrop-filter:blur(6px);border-bottom:1px solid var(--line);padding:14px 22px 10px;}
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;}
+.sub{color:var(--mute);font-size:13px;margin-top:2px;}
+.rows{display:flex;flex-wrap:wrap;gap:10px 22px;margin-top:12px;align-items:center;}
+.grp{display:flex;align-items:center;gap:6px;flex-wrap:wrap;}
+.grp label{font-size:11px;text-transform:uppercase;letter-spacing:.08em;color:var(--mute);margin-right:4px;}
+.pill{border:1px solid var(--line);background:var(--white);border-radius:30px;padding:6px 12px;font:inherit;font-size:13px;cursor:pointer;color:var(--ink);}
+.pill.on{background:var(--olive);border-color:var(--olive);color:var(--creme);}
+select{border:1px solid var(--line);background:var(--white);border-radius:30px;padding:6px 12px;font:inherit;font-size:13px;color:var(--ink);}
+.btn{border:1px solid var(--olive);background:var(--white);color:var(--olive);border-radius:30px;padding:7px 14px;font:inherit;font-size:13px;cursor:pointer;}
+.btn:hover{background:var(--olive);color:var(--creme);}
+.btn.ghost{border-color:var(--line);color:var(--mute);}
+.votes{font-size:13px;color:var(--mute);}
+.votes b{color:var(--ink);}
+main{padding:18px 22px 60px;}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:18px;}
+.card{background:var(--white);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;}
+.card.ok{border-color:var(--ok);box-shadow:0 0 0 2px rgba(62,122,75,.25);}
+.card.ko{opacity:.55;}
+.thumb{position:relative;aspect-ratio:4/3;background:#EDEBE5;}
+.thumb img{display:block;width:100%;height:100%;object-fit:cover;}
+.thumb .frame{position:absolute;inset:0;border:11px solid transparent;pointer-events:none;}
+.thumb .wait{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--mute);font-size:12px;}
+.body{padding:12px 14px 14px;display:flex;flex-direction:column;gap:9px;flex:1;}
+.name{font-family:'Cormorant Garamond',serif;font-size:21px;line-height:1.1;}
+.meta{display:flex;gap:6px;flex-wrap:wrap;font-size:11px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;}
+.meta .tag{background:var(--creme);border-radius:20px;padding:2px 8px;}
+.meta .sig{color:#9C7A3C;}
+.sw{display:flex;gap:8px;}
+.sw .s{flex:1;display:flex;flex-direction:column;gap:3px;min-width:0;}
+.sw .c{height:26px;border-radius:6px;border:1px solid rgba(0,0,0,.08);}
+.sw .l{font-size:10px;color:var(--mute);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sw .n{font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.why{font-size:13px;color:#44443F;}
+.alts{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mute);}
+.alts .a{width:24px;height:24px;border-radius:50%;border:2px solid transparent;cursor:pointer;box-shadow:0 0 0 1px rgba(0,0,0,.1) inset;}
+.alts .a.on{border-color:var(--ink);}
+.foot{display:flex;gap:8px;margin-top:auto;padding-top:4px;}
+.v{flex:1;border:1px solid var(--line);background:var(--white);border-radius:30px;padding:6px;font:inherit;font-size:13px;cursor:pointer;}
+.v.yes.on{background:var(--ok);border-color:var(--ok);color:#fff;}
+.v.no.on{background:var(--ko);border-color:var(--ko);color:#fff;}
+.pager{display:flex;justify-content:center;gap:10px;margin-top:22px;}
+.empty{color:var(--mute);padding:40px;text-align:center;}
+.note{margin:0 0 14px;color:var(--mute);font-size:13px;}
+@media (max-width:640px){header{padding:10px 14px}main{padding:14px}.grid{gap:12px}}
+</style>
+</head>
+<body>
+<header>
+  <div class="top">
+    <div>
+      <h1>Banc d'essai couleurs · <em>Conseiller Martingale v3</em></h1>
+      <div class="sub">Vignettes tissées avec le vrai rendu fibre. Vote ✓ ou ✗ sur chaque harmonie, puis exporte tes votes.</div>
+    </div>
+    <div class="grp">
+      <span class="votes" id="votes"></span>
+      <button class="btn" onclick="exportVotes()">Exporter mes votes</button>
+      <button class="btn ghost" onclick="clearVotes()">Vider</button>
+    </div>
+  </div>
+  <div class="rows">
+    <div class="grp" id="weaves"><label>Tressage</label></div>
+    <div class="grp"><label>Ambiance</label><select id="theme" onchange="refresh(true)"></select></div>
+    <div class="grp"><label>Recette</label><select id="recette" onchange="refresh(true)"></select></div>
+    <div class="grp"><label>Mode</label>
+      <button class="pill on" id="mode-prop" onclick="setMode('prop')">Propositions (4 par 4)</button>
+      <button class="pill" id="mode-cat" onclick="setMode('cat')">Catalogue complet</button>
+    </div>
+    <div class="grp" id="prop-ctl"><button class="btn" onclick="more()">Proposer d'autres harmonies</button></div>
+  </div>
+</header>
+<main>
+  <p class="note" id="note"></p>
+  <div class="grid" id="grid"></div>
+  <div class="pager" id="pager"></div>
+</main>
+<script>
+// Palette du configurateur (copie de COLORS dans index.html, référence : feuille « Palette couleurs configurateur »)
+const COLORS=[
+  {id:'blanc',name:'Blanc pur',hex:'#F5F2EC'},{id:'ivoire',name:'Ivoire ancien',hex:'#F1E6B2'},{id:'creme',name:'Crème',hex:'#EFE4CE'},{id:'ecru',name:'Écru',hex:'#D6D2C4'},
+  {id:'argent',name:'Argent clair',hex:'#B8BBBB'},{id:'gris',name:'Gris cendre',hex:'#9EA2A2'},{id:'noir',name:'Noir profond',hex:'#1A1A16'},
+  {id:'naturel',name:'Camel',hex:'#B9975B'},{id:'or',name:'Or mat',hex:'#C9A84C'},{id:'bronze',name:'Bronze ancien',hex:'#9C7A3C'},{id:'brun',name:'Brun miel',hex:'#7A5230'},{id:'chocolat',name:'Chocolat',hex:'#744F28'},{id:'marron',name:'Marron glacé',hex:'#4F2C1D'},
+  {id:'peche',name:'Pêche velours',hex:'#F0B285'},{id:'saumon',name:'Saumon fumé',hex:'#F7BCAC'},{id:'terracotta',name:'Corail poudré',hex:'#FFA38B'},{id:'orange',name:'Orange épicé',hex:'#F58132'},{id:'jaune',name:'Jaune citron',hex:'#FEDB00'},
+  {id:'rose',name:'Rose bonbon',hex:'#FF8DA1'},{id:'framboise',name:'Framboise vivace',hex:'#E24585'},{id:'fushia',name:'Fuchsia sombre',hex:'#A73A64'},{id:'rouge',name:'Rouge cerise',hex:'#BA0C2F'},{id:'rouge-eau',name:'Corail',hex:'#E56A54'},{id:'bordeaux',name:'Rouge bordeaux',hex:'#9B2242'},
+  {id:'prune',name:'Prune veloutée',hex:'#A15A95'},{id:'lavende',name:'Lavande séchée',hex:'#C5B4E3'},
+  {id:'vert-citron',name:'Vert citron',hex:'#C7E995'},{id:'vert-eau',name:"Vert d'eau",hex:'#63A193'},{id:'turquoise',name:'Turquoise lagon',hex:'#84CEC3'},{id:'kaki',name:'Kaki feutré',hex:'#8A8D4A'},{id:'olive',name:'Olive tendre',hex:'#4D5038'},{id:'sapin',name:'Sapin foncé',hex:'#0D5D3F'},
+  {id:'vert-344',name:'Vert menthe',hex:'#A0DAB3'},{id:'vert-2260',name:'Vert kaki clair',hex:'#B6CFAE'},{id:'vert-pomme',name:'Vert pomme',hex:'#BCE194'},{id:'vert-diamant',name:'Vert diamant',hex:'#9AC0A5'},
+  {id:'ciel',name:"Ciel d'été",hex:'#B9D3DC'},{id:'bleu',name:'Bleu glacier',hex:'#62B5E5'},{id:'bleu-roi',name:'Bleu roi',hex:'#3B3FB6'},{id:'bleu-marine',name:'Bleu marine',hex:'#3D4E80'},{id:'jaune-pastel',name:'Jaune pâle',hex:'#F0E87B'}
+];
+const SHORT={blanc:'blanc',ivoire:'ivoire',creme:'crème',ecru:'écru',argent:'argent',gris:'gris cendre',noir:'noir',naturel:'camel',or:'or',bronze:'bronze',brun:'brun miel',chocolat:'chocolat',marron:'marron glacé',peche:'pêche',saumon:'saumon',terracotta:'corail poudré',orange:'orange',jaune:'jaune citron',rose:'rose bonbon',framboise:'framboise',fushia:'fuchsia',rouge:'rouge cerise','rouge-eau':'corail',bordeaux:'rouge bordeaux',prune:'prune',lavende:'lavande','vert-citron':'vert citron','vert-eau':"vert d'eau",turquoise:'turquoise',kaki:'kaki',olive:'olive',sapin:'vert sapin','vert-344':'vert menthe','vert-2260':'vert kaki clair','vert-pomme':'vert pomme','vert-diamant':'vert diamant',ciel:'bleu ciel',bleu:'bleu glacier','bleu-roi':'bleu roi','bleu-marine':'bleu marine','jaune-pastel':'jaune pâle'};
+const BY={};COLORS.forEach(c=>BY[c.id]=c);
+const WEAVES=[['serge','Sergé'],['chevron','Chevron'],['bourdon','Bourdon'],['natte','Natté'],['damier','Damier'],['maille','Maille']];
+const MASKS={damier:'textures/damier-mask.png',maille:'textures/maille-mask.png',chevron:'textures/chevron-mask-serge.png',natte:'textures/natte-mask.png',serge:'textures/serge-mask-losange.png',bourdon:'textures/bourdon-mask.png'};
+const ROLES={maille:{c1:'Dominante',c3:'Équilibre',c2:'Accent'},damier:{c1:'Dominante',c3:'Équilibre',c2:'Accent'},natte:{c1:'Dominante',c2:'Équilibre',c3:'Accent'},serge:{c1:'Dominante',c2:'Équilibre'},chevron:{c1:'Dominante',c2:'Équilibre'},bourdon:{c1:'Dominante',c2:'Équilibre'}};
+
+const CM=window.ConseillerMartingale;
+CM.charger({bois:{nom:'Structure bois',hex:'#7A5230'},couleurs:COLORS.map(c=>({id:c.id,nom:c.name,hex:c.hex,nomConseiller:SHORT[c.id]}))});
+
+const S={weave:(location.hash.replace('#','')in ROLES)?location.hash.replace('#',''):'serge',theme:'aucune',recette:'',mode:'prop',spin:0,page:0};
+let shown=[], excl=[], chosenContour={}, votes=JSON.parse(localStorage.getItem('banc-couleurs-votes')||'{}');
+
+/* ---------- UI de base ---------- */
+const $=id=>document.getElementById(id);
+WEAVES.forEach(([id,label])=>{const b=document.createElement('button');b.className='pill'+(id===S.weave?' on':'');b.textContent=label;b.onclick=()=>{S.weave=id;location.hash=id;[...$('weaves').children].forEach(x=>x.classList.toggle('on',x===b));refresh(true);};$('weaves').appendChild(b);});
+$('theme').innerHTML='<option value="aucune">Toutes mélangées</option>'+CM.ORDRE_THEMES.map(t=>`<option value="${t}">${CM.THEMES[t].label}</option>`).join('');
+$('recette').innerHTML='<option value="">Toutes</option>'+CM.ORDRE_RECETTES.map(r=>`<option value="${r}">${CM.RECETTES[r].label} (${CM.RECETTES[r].court})</option>`).join('');
+function setMode(m){S.mode=m;$('mode-prop').classList.toggle('on',m==='prop');$('mode-cat').classList.toggle('on',m==='cat');$('prop-ctl').style.display=m==='prop'?'':'none';refresh(true);}
+function esc(s){return String(s||'').replace(/[&<>"']/g,ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[ch]));}
+
+/* ---------- Propositions ---------- */
+function refresh(reset){
+  S.theme=$('theme').value;S.recette=$('recette').value;
+  if(reset){S.spin=0;S.page=0;excl=[];shown=[];}
+  if(S.mode==='prop'){
+    if(!shown.length)more();else render();
+  } else {
+    const all=CM.candidats(S.weave,S.theme,S.recette||null);
+    $('note').textContent=all.length+' harmonies possibles, de la mieux notée à la moins bien notée. 24 par page.';
+    const per=24,pages=Math.ceil(all.length/per);
+    shown=all.slice(S.page*per,(S.page+1)*per);
+    render();
+    $('pager').innerHTML=pages>1?`<button class="btn ghost" ${S.page===0?'disabled':''} onclick="S.page--;refresh()">‹ Précédent</button><span class="votes">page ${S.page+1} / ${pages}</span><button class="btn ghost" ${S.page>=pages-1?'disabled':''} onclick="S.page++;refresh()">Suivant ›</button>`:'';
+  }
+}
+function more(){
+  excl=excl.concat(shown.map(p=>p.cle)).slice(-120);
+  shown=CM.recommander({tressage:S.weave,famille:S.theme,recette:S.recette||null,n:4,graine:'banc-'+S.weave+'-'+S.theme+'-'+S.recette+'-'+S.spin,alea:10,exclure:excl});
+  S.spin++;
+  $('note').textContent='Même logique que le configurateur : 4 idées variées, « Proposer d\'autres harmonies » en prépare 4 nouvelles. Lot '+S.spin+'.';
+  $('pager').innerHTML='';
+  render();
+}
+
+/* ---------- Cartes ---------- */
+function voteKey(p){return p.tressage+':'+p.cle+':'+(chosenContour[p.id]||p.contour);}
+function render(){
+  const g=$('grid');
+  if(!shown.length){g.innerHTML='<div class="empty">Aucune harmonie ne correspond à ce filtre.</div>';return;}
+  g.innerHTML=shown.map((p,i)=>{
+    const contour=chosenContour[p.id]||p.contour;
+    const key=voteKey(p), v=votes[key];
+    const slots=Object.keys(ROLES[p.tressage]);
+    const sw=slots.map(k=>`<div class="s"><div class="c" style="background:${BY[p.couleurs[k]].hex}"></div><div class="l">${ROLES[p.tressage][k]}</div><div class="n">${esc(BY[p.couleurs[k]].name)}</div></div>`).join('')
+      +`<div class="s"><div class="c" style="background:${BY[contour].hex}"></div><div class="l">Contour</div><div class="n">${esc(BY[contour].name)}</div></div>`;
+    const alts=p.contoursAlternatifs.map(a=>`<span class="a${a.id===contour?' on':''}" title="${esc(a.nom)} · ${esc(a.styleLabel)}" style="background:${a.hex}" onclick="pickContour(${i},'${a.id}')"></span>`).join('');
+    return `<div class="card ${v==='oui'?'ok':v==='non'?'ko':''}" id="card-${i}">
+      <div class="thumb"><img id="img-${i}" alt=""><div class="frame" style="border-color:${BY[contour].hex}"></div><div class="wait" id="wait-${i}">tissage…</div></div>
+      <div class="body">
+        <div class="name">${esc(p.nom)}</div>
+        <div class="meta"><span class="tag">${esc(p.ambiance)}</span><span class="tag">${esc(p.recetteLabel)}</span>${p.accentStyle?`<span class="tag">accent ${esc(CM.ACCENT_STYLES[p.accentStyle].label)}</span>`:''}<span class="tag">${p.score}/100</span>${p.signature?'<span class="sig">★ coup de cœur</span>':''}</div>
+        <div class="sw">${sw}</div>
+        <div class="why">${esc(p.pourquoi)}</div>
+        <div class="alts">Contours proposés ${alts}</div>
+        <div class="foot"><button class="v yes${v==='oui'?' on':''}" onclick="vote(${i},'oui')">✓ Je valide</button><button class="v no${v==='non'?' on':''}" onclick="vote(${i},'non')">✗ Non</button></div>
+      </div></div>`;
+  }).join('');
+  shown.forEach((p,i)=>observe(i));
+  countVotes();
+}
+function pickContour(i,id){
+  const p=shown[i];chosenContour[p.id]=id;
+  render();
+}
+function vote(i,val){
+  const p=shown[i],key=voteKey(p);
+  if(votes[key]===val)delete votes[key];
+  else votes[key]=val;
+  localStorage.setItem('banc-couleurs-votes',JSON.stringify(votes));
+  // on garde aussi le détail pour l'export
+  const det=JSON.parse(localStorage.getItem('banc-couleurs-detail')||'{}');
+  if(votes[key])det[key]={tressage:p.tressage,ambiance:p.theme,recette:p.recette,couleurs:p.couleurs,contour:chosenContour[p.id]||p.contour,nom:p.nom,vote:val};else delete det[key];
+  localStorage.setItem('banc-couleurs-detail',JSON.stringify(det));
+  render();
+}
+function countVotes(){const n=Object.values(votes);$('votes').innerHTML=`<b>${n.filter(v=>v==='oui').length}</b> validées · <b>${n.filter(v=>v==='non').length}</b> refusées`;}
+function exportVotes(){
+  const det=JSON.parse(localStorage.getItem('banc-couleurs-detail')||'{}');
+  const lignes=Object.values(det).map(d=>`${d.vote==='oui'?'OUI':'non'}\t${d.tressage}\t${d.ambiance}\t${d.recette}\t${Object.keys(d.couleurs).map(k=>k+'='+d.couleurs[k]).join(' ')}\tcontour=${d.contour}\t${d.nom}`);
+  const blob=new Blob([JSON.stringify(Object.values(det),null,1)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='votes-banc-couleurs.json';a.click();
+  if(navigator.clipboard)navigator.clipboard.writeText(lignes.join('\n')).catch(()=>{});
+  alert(lignes.length+' votes exportés (fichier JSON téléchargé, et copie texte dans le presse-papiers).');
+}
+function clearVotes(){if(!confirm('Effacer tous les votes ?'))return;votes={};localStorage.removeItem('banc-couleurs-votes');localStorage.removeItem('banc-couleurs-detail');render();}
+
+/* ---------- Vignettes tissées (même rendu que le configurateur) ---------- */
+let renderer=null,scene=null,cam=null,geoCache={};
+const pending=new Set();
+function ensureRenderer(){
+  if(renderer)return;
+  renderer=new THREE.WebGLRenderer({antialias:true,alpha:false,preserveDrawingBuffer:true});
+  renderer.setPixelRatio(1);renderer.setSize(400,300,false);
+  if(THREE.sRGBEncoding)renderer.outputEncoding=THREE.sRGBEncoding;
+  scene=new THREE.Scene();scene.background=new THREE.Color(0xF3F3F1);
+  cam=new THREE.OrthographicCamera(-2,2,1.5,-1.5,0.1,10);cam.position.set(0,0,5);cam.lookAt(0,0,0);
+}
+function planeFor(weave){
+  if(geoCache[weave])return geoCache[weave];
+  const mm=FIBRE_SETTINGS[weave].refUvMm||[90,90];
+  const geo=new THREE.PlaneGeometry(4,3);
+  const uv=geo.attributes.uv;for(let i=0;i<uv.count;i++)uv.setXY(i,uv.getX(i)*112/mm[0],uv.getY(i)*84/mm[1]);
+  geoCache[weave]=geo;return geo;
+}
+function matFor(p){
+  const s=p.slots,w=p.tressage;
+  if(w==='maille'||w==='damier')return makeFibreMat(w,MASKS[w],s.c1,s.c2,s.c3,s.c5,null,false);
+  if(w==='natte')return makeFibreMat(w,MASKS[w],s.c1,s.c2,s.c3,null,null,false);
+  return makeFibreMat(w,MASKS[w],s.c1,s.c2,null,null,null,false);
+}
+function drawThumb(i){
+  const p=shown[i],img=$('img-'+i);if(!p||!img)return;
+  ensureRenderer();
+  const mat=matFor(p);
+  if(mat.uniforms&&mat.uniforms.uLogoOn)mat.uniforms.uLogoOn.value=0;
+  const mesh=new THREE.Mesh(planeFor(p.tressage),mat);scene.add(mesh);
+  renderer.render(scene,cam);
+  img.src=renderer.domElement.toDataURL('image/jpeg',0.88);
+  scene.remove(mesh);mat.dispose();
+  const w=$('wait-'+i);if(w)w.remove();
+}
+const io=new IntersectionObserver(entries=>{entries.forEach(en=>{if(en.isIntersecting){const i=+en.target.dataset.i;pending.add(i);io.unobserve(en.target);}});flush();},{rootMargin:'300px'});
+function observe(i){const el=$('card-'+i);if(el){el.dataset.i=i;io.observe(el);}}
+let flushTimer=null;
+function flush(){clearTimeout(flushTimer);flushTimer=setTimeout(()=>{pending.forEach(i=>drawThumb(i));},60);}
+// Les textures arrivent en différé : fibre-material.js appelle requestRender() quand une texture est prête.
+let redrawTimer=null;
+window.requestRender=function(){clearTimeout(redrawTimer);redrawTimer=setTimeout(()=>{shown.forEach((p,i)=>{if($('img-'+i))drawThumb(i);});},120);};
+// Pré-charge les masques pour que les premières vignettes ne soient pas vides
+Object.values(MASKS).forEach(u=>getFibreMaskTexture(u));getFibreDataTexture(FIBRE_SETTINGS.maille.fibreMap);
+
+refresh(true);
+</script>
+</body>
+</html>
