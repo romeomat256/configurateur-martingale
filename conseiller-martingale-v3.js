@@ -19,11 +19,13 @@
     3. La 3e couleur (accent) et le contour sont choisis selon des styles nommés.
     4. La sélection impose la variété : dominante, recette, ambiance, et au plus une
        harmonie « classique » par lot de 4.
+    5. Goûts Martingale : poids de recettes et d'ambiances recalés sur les harmonies validées
+       au banc d'essai, bonus sur ces harmonies (trio, paire, contour) ; voir harmonies-validees.js.
 
   Espace colorimétrique : OKLab (L clarté 0..1, C saturation, H teinte en degrés).
   Navigateur : window.ConseillerMartingale ; Node : require('./conseiller-martingale-v3.js')
-  API : charger, configurer, couleur, recommander, diagnostiquer, contoursPour,
-        THEMES, ORDRE_THEMES, RECETTES, TRESSAGES
+  API : charger, configurer, validees, couleur, recommander, diagnostiquer, contoursPour,
+        THEMES, ORDRE_THEMES, RECETTES, TRESSAGES, GOUTS
 */
 (function (root, factory) {
   if (typeof module === 'object' && module.exports) module.exports = factory();
@@ -106,6 +108,8 @@
     if (o.contourSlot) CONFIG.contourSlot = o.contourSlot;
     if (o.bois) { CONFIG.bois = o.bois; BOIS = analyser(o.bois); }
     if (o.themes) Object.keys(o.themes).forEach(k => { THEMES[k] = Object.assign({}, THEMES[k] || {}, o.themes[k]); });
+    if (o.gouts) { if (o.gouts.recettes) Object.assign(GOUTS.recettes, o.gouts.recettes); if (o.gouts.themes) Object.assign(GOUTS.themes, o.gouts.themes); }
+    if (o.validees) validees(o.validees);
   }
   const ids = l => (l || []).map(couleur).filter(Boolean);
 
@@ -402,6 +406,40 @@
   };
   const ORDRE_THEMES = ['brasserie', 'riviera', 'cotebasque', 'barvin', 'hotelchic', 'plage', 'guinguette', 'pop', 'terre', 'poudre'];
 
+  Object.keys(THEMES).forEach(k => { THEMES[k].id = k; });
+
+  /* ================= Goûts Martingale ================= */
+
+  // Recalés sur les 174 harmonies validées au banc d'essai (nov. 2026) :
+  // camaïeu et pastel plébiscités, « couleur + blanc » rare, Brasserie / Bord de mer / Côte basque peu retenues.
+  const GOUTS = {
+    recettes: { camaieu: 1.25, pastel: 1.2, profond: 1.05, contraste: 1.0, classique: 0.55, 'neutre-vif': 0.65, complement: 0.65, voisines: 0.65 },
+    themes: { terre: 1.15, guinguette: 1.15, poudre: 1.15, barvin: 1.05, pop: 1.0, hotelchic: 1.0, riviera: 1.0, plage: 0.85, brasserie: 0.85, cotebasque: 0.85 },
+    bonusTrio: 10,     // trio exactement validé (même tressage ou extrapolé par rôle)
+    bonusPaire: 6,     // dominante + équilibre validés ensemble
+    bonusContour: 8    // contour validé avec cette dominante + équilibre
+  };
+  // Index des harmonies validées : trios par rôle, paires, contours par paire
+  const VALIDEES = { trios: new Set(), paires: new Set(), contours: {} };
+  function validees(liste) {
+    (liste || []).forEach(v => {
+      const r = v.r || v;
+      if (!r || r.length < 2) return;
+      if (r.length >= 3) VALIDEES.trios.add(r.slice(0, 3).join('+'));
+      const pk = r[0] + '+' + r[1];
+      VALIDEES.paires.add(pk);
+      if (v.c) { (VALIDEES.contours[pk] = VALIDEES.contours[pk] || {})[v.c] = (VALIDEES.contours[pk][v.c] || 0) + 1; }
+    });
+    return VALIDEES.trios.size + VALIDEES.paires.size;
+  }
+  function bonusValide(cols) {
+    const pk = cols[0].id + '+' + cols[1].id;
+    let b = 0;
+    if (cols.length >= 3 && VALIDEES.trios.has(cols.map(c => c.id).join('+'))) b += GOUTS.bonusTrio;
+    else if (VALIDEES.paires.has(pk)) b += GOUTS.bonusPaire;
+    return b;
+  }
+
   /* ================= Accents (3e couleur) ================= */
 
   const ACCENT_STYLES = {
@@ -440,11 +478,11 @@
       if (!w) return;
       const f = RECETTES[id].fit(d, e);
       if (f === null || f === undefined) return;
-      const v = f * w;
+      const v = f * w * (GOUTS.recettes[id] || 1);
       if (!best || v > best.v) best = { recette: id, fit: f, v };
     });
     if (!best) return null;
-    let sc = 58 + best.v * 24;
+    let sc = 58 + best.v * 24 * (GOUTS.themes[theme.id] || 1);
     // deux couleurs vives de même clarté et de teintes éloignées : ça vibre
     if (d.franc && e.franc && dL(d, e) < 0.1 && dH(d, e) >= 50) sc -= theme.ose ? 8 : 24;
     // teintes qui se battent (ni proches, ni opposées) entre deux couleurs franches de clarté voisine
@@ -506,6 +544,9 @@
       else if (c.blancCasse || c.L > 0.8) { style = 'clair'; sc += moyL < 0.62 ? 9 : 3; }
       else style = 'signature';
       if (theme.contour.indexOf(c.id) >= 0) sc += 9;
+      const vc = VALIDEES.contours[cols[0].id + '+' + cols[1].id];
+      if (vc && vc[c.id]) sc += GOUTS.bonusContour;
+      if (c.noirProche && !theme.ose) sc -= 6;
       if (dE(c, BOIS) < 0.08) sc -= 20;                           // se perd sur le bois
       if (!dansTressage) sc += Math.min(6, dE(c, d) * 12);         // se détache de la dominante
       if (c.vif && !theme.ose && !dansTressage) sc -= 8;
@@ -526,7 +567,8 @@
       const r = noter(cols, th, t);
       if (!r) return;
       if (filtreRecette && r.recette !== filtreRecette) return;
-      out.push({ cols, theme: themeId, recette: r.recette, accentStyle: r.accentStyle || null, score: r.score + (sig !== undefined ? 6 : 0), signature: sig !== undefined, sigContour: sig || null });
+      const bv = bonusValide(cols);
+      out.push({ cols, theme: themeId, recette: r.recette, accentStyle: r.accentStyle || null, score: r.score + (sig !== undefined ? 6 : 0) + bv, signature: sig !== undefined, validee: bv >= GOUTS.bonusTrio, sigContour: sig || null });
     };
     (th.signatures || []).forEach(s => {
       const c = ids(s.slice(0, t.slots.length));
@@ -622,6 +664,7 @@
       recetteLabel: rec.label,
       accentStyle: x.accentStyle || null,
       signature: x.signature,
+      validee: !!x.validee,
       tressage: t.id,
       couleurs,
       contour: contour.id,
@@ -688,8 +731,8 @@
   }
 
   return {
-    CONFIG, TRESSAGES, THEMES, ORDRE_THEMES, RECETTES, ORDRE_RECETTES, ACCENT_STYLES, CONTOURS,
-    charger, configurer, couleur, recommander, diagnostiquer,
+    CONFIG, TRESSAGES, THEMES, ORDRE_THEMES, RECETTES, ORDRE_RECETTES, ACCENT_STYLES, CONTOURS, GOUTS,
+    charger, configurer, validees, couleur, recommander, diagnostiquer,
     contoursPour: (cols, themeId, n) => contoursPour(ids(cols), THEMES[themeId] || THEMES.brasserie, n),
     candidats: (tressageId, themeId, recette) => { const t = tressage(tressageId); const th = THEMES[themeId] ? [themeId] : ORDRE_THEMES; let c = []; th.forEach(id => { c = c.concat(candidatsTheme(id, t, recette)); }); c.sort((a, b) => b.score - a.score); const vu = new Set(); return c.filter(x => { const k = cleDe(x); if (vu.has(k)) return false; vu.add(k); return true; }).map(x => finaliser(x, t, null)); },
     palette: () => PALETTE.slice(),

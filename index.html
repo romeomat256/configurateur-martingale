@@ -23,7 +23,8 @@
 <script src="./vendor/DRACOLoader.js"></script>
 <script src="./vendor/ktx2-loader.js"></script>
 <script src="./vendor/meshopt_decoder.js"></script>
-<script src="./conseiller-martingale.js"></script>
+<script src="./conseiller-martingale-v3.js"></script>
+<script src="./harmonies-validees.js"></script>
 <link rel="stylesheet" href="./vendor/fonts.css">
 <script src="./weave-materials.js"></script>
 <script src="./fibre-material.js"></script>
@@ -1300,7 +1301,7 @@ function initAdvisorEngine(){
     return false;
   }
   window.ConseillerMartingale.charger(advisorPalette());
-  window.ConseillerMartingale.configurer({tressages:ADVISOR_ENGINE_TRESSAGES});
+  window.ConseillerMartingale.configurer({tressages:ADVISOR_ENGINE_TRESSAGES,validees:window.HarmoniesValidees||[]});
   advisorEngineReady=true;
   return true;
 }

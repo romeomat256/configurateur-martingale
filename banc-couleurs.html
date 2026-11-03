@@ -11,6 +11,7 @@
 <script src="weave-materials.js"></script>
 <script src="fibre-material.js"></script>
 <script src="conseiller-martingale-v3.js"></script>
+<script src="harmonies-validees.js"></script>
 <style>
 :root{--olive:#4D5038;--creme:#F7F5F0;--ink:#1E1E1C;--mute:#7A7A72;--line:#E2DED4;--white:#FFFFFF;--ok:#3E7A4B;--ko:#B5443A;}
 *{box-sizing:border-box;}
@@ -69,7 +70,7 @@ main{padding:18px 22px 60px;}
   <div class="top">
     <div>
       <h1>Banc d'essai couleurs · <em>Conseiller Martingale v3</em></h1>
-      <div class="sub">Vignettes tissées avec le vrai rendu fibre. Vote ✓ ou ✗ sur chaque harmonie, puis exporte tes votes.</div>
+      <div class="sub">Vignettes tissées avec le vrai rendu fibre. Vote ✓ ou ✗ sur chaque harmonie, puis exporte tes votes. Le moteur tient déjà compte des 174 harmonies validées le 3 nov.</div>
     </div>
     <div class="grp">
       <span class="votes" id="votes"></span>
@@ -114,6 +115,7 @@ const ROLES={maille:{c1:'Dominante',c3:'Équilibre',c2:'Accent'},damier:{c1:'Dom
 
 const CM=window.ConseillerMartingale;
 CM.charger({bois:{nom:'Structure bois',hex:'#7A5230'},couleurs:COLORS.map(c=>({id:c.id,nom:c.name,hex:c.hex,nomConseiller:SHORT[c.id]}))});
+CM.configurer({validees:window.HarmoniesValidees||[]});
 
 const S={weave:(location.hash.replace('#','')in ROLES)?location.hash.replace('#',''):'serge',theme:'aucune',recette:'',mode:'prop',spin:0,page:0};
 let shown=[], excl=[], chosenContour={}, votes=JSON.parse(localStorage.getItem('banc-couleurs-votes')||'{}');
@@ -166,7 +168,7 @@ function render(){
       <div class="thumb"><img id="img-${i}" alt=""><div class="frame" style="border-color:${BY[contour].hex}"></div><div class="wait" id="wait-${i}">tissage…</div></div>
       <div class="body">
         <div class="name">${esc(p.nom)}</div>
-        <div class="meta"><span class="tag">${esc(p.ambiance)}</span><span class="tag">${esc(p.recetteLabel)}</span>${p.accentStyle?`<span class="tag">accent ${esc(CM.ACCENT_STYLES[p.accentStyle].label)}</span>`:''}<span class="tag">${p.score}/100</span>${p.signature?'<span class="sig">★ coup de cœur</span>':''}</div>
+        <div class="meta"><span class="tag">${esc(p.ambiance)}</span><span class="tag">${esc(p.recetteLabel)}</span>${p.accentStyle?`<span class="tag">accent ${esc(CM.ACCENT_STYLES[p.accentStyle].label)}</span>`:''}<span class="tag">${p.score}/100</span>${p.validee?'<span class="sig" style="color:var(--ok)">✓ déjà validée</span>':p.signature?'<span class="sig">★ coup de cœur</span>':''}</div>
         <div class="sw">${sw}</div>
         <div class="why">${esc(p.pourquoi)}</div>
         <div class="alts">Contours proposés ${alts}</div>
