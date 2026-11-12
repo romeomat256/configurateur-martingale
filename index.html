@@ -675,21 +675,21 @@ const SHAPES={
   ],
 };
 // pantone = code Pantone Solid Coated du nuancier fournisseur (feuille « Palette couleurs configurateur »).
-// Pas de champ pantone = pas de code dans le nuancier : rien ne s'affiche sur la fiche PDF.
+// 9xxx C = gamme Pastels (pas de blanc ni de crème proches en Solid Coated). Sans champ pantone, rien ne s'affiche sur la fiche PDF.
 const COLORS=[
   // Neutres clairs — Sérénité
-  {id:'blanc',       name:'Blanc pur',        hex:'#F5F2EC', border:true},
+  {id:'blanc',       name:'Blanc pur',        hex:'#F5F2EC', border:true, pantone:'9285 C'},
   {id:'ivoire',      name:'Ivoire ancien',    hex:'#F1E6B2', border:true, pantone:'7499 C'},
-  {id:'creme',       name:'Crème',            hex:'#EFE4CE', border:true},
+  {id:'creme',       name:'Crème',            hex:'#EFE4CE', border:true, pantone:'9184 C'},
   {id:'ecru',        name:'Écru',             hex:'#D6D2C4', border:true, pantone:'7527 C'},
-  {id:'argent',      name:'Argent clair',     hex:'#B8BBBB'},
+  {id:'argent',      name:'Argent clair',     hex:'#B8BBBB', pantone:'Cool Gray 5 C'},
   {id:'gris',        name:'Gris cendre',      hex:'#9EA2A2', pantone:'422 C'},
-  {id:'noir',        name:'Noir profond',     hex:'#1A1A16'},
+  {id:'noir',        name:'Noir profond',     hex:'#1A1A16', pantone:'Neutral Black C'},
   // Naturels / Bois — Minéral
-  {id:'naturel',     name:'Camel',            hex:'#B9975B', pantone:'4655 C'},
-  {id:'or',          name:'Or mat',           hex:'#C9A84C'},
-  {id:'bronze',      name:'Bronze ancien',    hex:'#9C7A3C'},
-  {id:'brun',        name:'Brun miel',        hex:'#7A5230'},
+  {id:'naturel',     name:'Camel',            hex:'#B9975B', pantone:'465 C'},
+  {id:'or',          name:'Or mat',           hex:'#C9A84C', pantone:'4019 C'},
+  {id:'bronze',      name:'Bronze ancien',    hex:'#9C7A3C', pantone:'7558 C'},
+  {id:'brun',        name:'Brun miel',        hex:'#7A5230', pantone:'7568 C'},
   {id:'chocolat',    name:'Chocolat',         hex:'#744F28', pantone:'463 C'},
   {id:'marron',      name:'Marron glacé',     hex:'#4F2C1D', pantone:'4625 C'},
   // Chauds / Terracotta — Soleil
@@ -713,10 +713,10 @@ const COLORS=[
   {id:'vert-eau',    name:'Vert d\'eau',      hex:'#63A193', pantone:'6152 C'},
   {id:'turquoise',   name:'Turquoise lagon',  hex:'#84CEC3', pantone:'6141 C'},
   {id:'kaki',        name:'Kaki feutré',      hex:'#8A8D4A', pantone:'5767 C'},
-  {id:'olive',       name:'Olive tendre',     hex:'#4D5038'},
+  {id:'olive',       name:'Olive tendre',     hex:'#4D5038', pantone:'7764 C'},
   {id:'sapin',       name:'Sapin foncé',      hex:'#0D5D3F', pantone:'6160 C'},
   {id:'vert-344',    name:'Vert menthe',      hex:'#A0DAB3', pantone:'344 C'},
-  {id:'vert-2260',   name:'Vert kaki clair',  hex:'#B6CFAE', pantone:'7485 C'},
+  {id:'vert-2260',   name:'Vert kaki clair',  hex:'#B6CFAE', pantone:'2260 C'},
   {id:'vert-pomme',  name:'Vert pomme',       hex:'#BCE194', pantone:'7486 C'},
   {id:'vert-diamant',name:'Vert diamant',     hex:'#9AC0A5', pantone:'6176 C'},
   // Bleus — Azur
@@ -2892,12 +2892,17 @@ async function generateExportPDF(){
     let name=col.name;
     const txtColor=lum<0.55?'#FFFFFF':INK;
     setType('display',13,INK);
-    const codeW=col.pantone?textWidth(col.pantone,13,-0.03)/0.75:0;   // px maquette
+    // Nom + code long (« Neutral Black C ») : on réduit le corps de la ligne avant de tronquer le nom
+    let fs=13;
+    const pxW=(str,size)=>textWidth(str,size,-0.03)/0.75;              // px maquette
+    while(col.pantone && fs>10.5 && pxW(name,fs)+10+pxW(col.pantone,fs)>palW-20) fs-=0.5;
+    const codeW=col.pantone?pxW(col.pantone,fs):0;
     const nameMax=palW-20-(codeW?codeW+10:0);
-    while(name.length>1 && textWidth(name,13,-0.03)>u(nameMax)) name=name.slice(0,-1);
+    while(name.length>1 && pxW(name,fs)>nameMax) name=name.slice(0,-1);
     if(name!==col.name) name=name.slice(0,-1)+'…';
-    drawText(name,palX+10,y+bH/2+4.5,'display',13,txtColor,-0.03);
-    if(col.pantone) drawText(col.pantone,palX+palW-10-codeW,y+bH/2+4.5,'display',13,txtColor,-0.03);
+    const baseY=y+bH/2+4.5*fs/13;
+    drawText(name,palX+10,baseY,'display',fs,txtColor,-0.03);
+    if(col.pantone) drawText(col.pantone,palX+palW-10-codeW,baseY,'display',fs,txtColor,-0.03);
   });
 
   // Signature, centrée dans l'espace libre
