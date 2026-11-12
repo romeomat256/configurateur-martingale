@@ -674,56 +674,58 @@ const SHAPES={
 
   ],
 };
+// pantone = code Pantone Solid Coated du nuancier fournisseur (feuille « Palette couleurs configurateur »).
+// Pas de champ pantone = pas de code dans le nuancier : rien ne s'affiche sur la fiche PDF.
 const COLORS=[
   // Neutres clairs — Sérénité
   {id:'blanc',       name:'Blanc pur',        hex:'#F5F2EC', border:true},
-  {id:'ivoire',      name:'Ivoire ancien',    hex:'#F1E6B2', border:true},
+  {id:'ivoire',      name:'Ivoire ancien',    hex:'#F1E6B2', border:true, pantone:'7499 C'},
   {id:'creme',       name:'Crème',            hex:'#EFE4CE', border:true},
-  {id:'ecru',        name:'Écru',             hex:'#D6D2C4', border:true},
+  {id:'ecru',        name:'Écru',             hex:'#D6D2C4', border:true, pantone:'7527 C'},
   {id:'argent',      name:'Argent clair',     hex:'#B8BBBB'},
-  {id:'gris',        name:'Gris cendre',      hex:'#9EA2A2'},
+  {id:'gris',        name:'Gris cendre',      hex:'#9EA2A2', pantone:'422 C'},
   {id:'noir',        name:'Noir profond',     hex:'#1A1A16'},
   // Naturels / Bois — Minéral
-  {id:'naturel',     name:'Camel',            hex:'#B9975B'},
+  {id:'naturel',     name:'Camel',            hex:'#B9975B', pantone:'4655 C'},
   {id:'or',          name:'Or mat',           hex:'#C9A84C'},
   {id:'bronze',      name:'Bronze ancien',    hex:'#9C7A3C'},
   {id:'brun',        name:'Brun miel',        hex:'#7A5230'},
-  {id:'chocolat',    name:'Chocolat',         hex:'#744F28'},
-  {id:'marron',      name:'Marron glacé',     hex:'#4F2C1D'},
+  {id:'chocolat',    name:'Chocolat',         hex:'#744F28', pantone:'463 C'},
+  {id:'marron',      name:'Marron glacé',     hex:'#4F2C1D', pantone:'4625 C'},
   // Chauds / Terracotta — Soleil
-  {id:'peche',       name:'Pêche velours',    hex:'#F0B285'},
-  {id:'saumon',      name:'Saumon fumé',      hex:'#F7BCAC'},
-  {id:'terracotta',  name:'Corail poudré',    hex:'#FFA38B'},
-  {id:'orange',      name:'Orange épicé',     hex:'#F58132'},
-  {id:'jaune',       name:'Jaune citron',     hex:'#FEDB00'},
+  {id:'peche',       name:'Pêche velours',    hex:'#F0B285', pantone:'6015 C'},
+  {id:'saumon',      name:'Saumon fumé',      hex:'#F7BCAC', pantone:'4033 C'},
+  {id:'terracotta',  name:'Corail poudré',    hex:'#FFA38B', pantone:'1625 C'},
+  {id:'orange',      name:'Orange épicé',     hex:'#F58132', pantone:'6018 C'},
+  {id:'jaune',       name:'Jaune citron',     hex:'#FEDB00', pantone:'108 C'},
   // Roses / Rouges — Passion
-  {id:'rose',        name:'Rose bonbon',      hex:'#FF8DA1'},
-  {id:'framboise',   name:'Framboise vivace', hex:'#E24585'},
-  {id:'fushia',      name:'Fuchsia sombre',   hex:'#A73A64'},
-  {id:'rouge',       name:'Rouge cerise',     hex:'#BA0C2F'},
-  {id:'rouge-eau',   name:'Corail',           hex:'#E56A54'},
-  {id:'bordeaux',    name:'Rouge bordeaux',   hex:'#9B2242'},
+  {id:'rose',        name:'Rose bonbon',      hex:'#FF8DA1', pantone:'1775 C'},
+  {id:'framboise',   name:'Framboise vivace', hex:'#E24585', pantone:'7424 C'},
+  {id:'fushia',      name:'Fuchsia sombre',   hex:'#A73A64', pantone:'7433 C'},
+  {id:'rouge',       name:'Rouge cerise',     hex:'#BA0C2F', pantone:'200 C'},
+  {id:'rouge-eau',   name:'Corail',           hex:'#E56A54', pantone:'7416 C'},
+  {id:'bordeaux',    name:'Rouge bordeaux',   hex:'#9B2242', pantone:'7420 C'},
   // Violets — Mystère
-  {id:'prune',       name:'Prune veloutée',   hex:'#A15A95'},
-  {id:'lavende',     name:'Lavande séchée',   hex:'#C5B4E3'},
+  {id:'prune',       name:'Prune veloutée',   hex:'#A15A95', pantone:'7655 C'},
+  {id:'lavende',     name:'Lavande séchée',   hex:'#C5B4E3', pantone:'2635 C'},
   // Verts — Nature
-  {id:'vert-citron', name:'Vert citron',      hex:'#C7E995'},
-  {id:'vert-eau',    name:'Vert d\'eau',      hex:'#63A193'},
-  {id:'turquoise',   name:'Turquoise lagon',  hex:'#84CEC3'},
-  {id:'kaki',        name:'Kaki feutré',      hex:'#8A8D4A'},
+  {id:'vert-citron', name:'Vert citron',      hex:'#C7E995', pantone:'2282 C'},
+  {id:'vert-eau',    name:'Vert d\'eau',      hex:'#63A193', pantone:'6152 C'},
+  {id:'turquoise',   name:'Turquoise lagon',  hex:'#84CEC3', pantone:'6141 C'},
+  {id:'kaki',        name:'Kaki feutré',      hex:'#8A8D4A', pantone:'5767 C'},
   {id:'olive',       name:'Olive tendre',     hex:'#4D5038'},
-  {id:'sapin',       name:'Sapin foncé',      hex:'#0D5D3F'},
-  {id:'vert-344',    name:'Vert menthe',      hex:'#A0DAB3'},
-  {id:'vert-2260',   name:'Vert kaki clair',  hex:'#B6CFAE'},
-  {id:'vert-pomme',  name:'Vert pomme',       hex:'#BCE194'},
-  {id:'vert-diamant',name:'Vert diamant',     hex:'#9AC0A5'},
+  {id:'sapin',       name:'Sapin foncé',      hex:'#0D5D3F', pantone:'6160 C'},
+  {id:'vert-344',    name:'Vert menthe',      hex:'#A0DAB3', pantone:'344 C'},
+  {id:'vert-2260',   name:'Vert kaki clair',  hex:'#B6CFAE', pantone:'7485 C'},
+  {id:'vert-pomme',  name:'Vert pomme',       hex:'#BCE194', pantone:'7486 C'},
+  {id:'vert-diamant',name:'Vert diamant',     hex:'#9AC0A5', pantone:'6176 C'},
   // Bleus — Azur
-  {id:'ciel',        name:'Ciel d\'été',      hex:'#B9D3DC'},
-  {id:'bleu',        name:'Bleu glacier',     hex:'#62B5E5'},
-  {id:'bleu-roi',    name:'Bleu roi',         hex:'#3B3FB6'},
-  {id:'bleu-marine', name:'Bleu marine',      hex:'#3D4E80'},
+  {id:'ciel',        name:'Ciel d\'été',      hex:'#B9D3DC', pantone:'552 C'},
+  {id:'bleu',        name:'Bleu glacier',     hex:'#62B5E5', pantone:'2915 C'},
+  {id:'bleu-roi',    name:'Bleu roi',         hex:'#3B3FB6', pantone:'2369 C'},
+  {id:'bleu-marine', name:'Bleu marine',      hex:'#3D4E80', pantone:'4142 C'},
   // Jaunes — Luminosité
-  {id:'jaune-pastel',name:'Jaune pâle',       hex:'#F0E87B'},
+  {id:'jaune-pastel',name:'Jaune pâle',       hex:'#F0E87B', pantone:'602 C'},
 ];
 const BASE_COLORS=new Set(['naturel','brun']);
 let unlocked=new Set(COLORS.map(c=>c.id));
@@ -2874,6 +2876,12 @@ async function generateExportPDF(){
   const weaveSlots = WEAVE_COLOR_SLOTS[S.weave]||[];
   const colorGetters = {c1:getC1,c2:getC2,c3:getC3,c4:getC4,c5:getC5};
   const colorRows = weaveSlots.map(slot=>colorGetters[slot.key]?.()).filter(Boolean);
+  // Codes Pantone Solid Coated : mention en face du titre, code à droite de chaque couleur
+  if(colorRows.some(col=>col.pantone)){
+    const MUTED='#73736B', label='Pantone Solid Coated';
+    setType('display',10,MUTED);
+    drawText(label,750-textWidth(label,10,0)/0.75,row2+11,'display',10,MUTED);
+  }
   const blocksTop=row2+16+4, blocksH=vH-16-4, gap=4;
   const bH=(blocksH-gap*(colorRows.length-1))/Math.max(1,colorRows.length);
   colorRows.forEach((col,i)=>{
@@ -2882,10 +2890,14 @@ async function generateExportPDF(){
     pdf.setFillColor(r,g,b); pdf.rect(u(palX),u(y),u(palW),u(bH),'F');
     const lum=(0.299*r+0.587*g+0.114*b)/255;
     let name=col.name;
+    const txtColor=lum<0.55?'#FFFFFF':INK;
     setType('display',13,INK);
-    while(name.length>1 && textWidth(name,13,-0.03)>u(palW-20)) name=name.slice(0,-1);
+    const codeW=col.pantone?textWidth(col.pantone,13,-0.03)/0.75:0;   // px maquette
+    const nameMax=palW-20-(codeW?codeW+10:0);
+    while(name.length>1 && textWidth(name,13,-0.03)>u(nameMax)) name=name.slice(0,-1);
     if(name!==col.name) name=name.slice(0,-1)+'…';
-    drawText(name,palX+10,y+bH/2+4.5,'display',13,lum<0.55?'#FFFFFF':INK,-0.03);
+    drawText(name,palX+10,y+bH/2+4.5,'display',13,txtColor,-0.03);
+    if(col.pantone) drawText(col.pantone,palX+palW-10-codeW,y+bH/2+4.5,'display',13,txtColor,-0.03);
   });
 
   // Signature, centrée dans l'espace libre
