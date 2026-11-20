@@ -745,3 +745,102 @@ function makeFibreMat(weaveId, maskUri, c1hex, c2hex, c3hex, c4hex, mappingTex, 
     extensions:{derivatives:true},
   });
 }
+
+/*
+ * Contour (lanière) : même fibre que le tressage, en plus épais.
+ * Même PVC teinté masse, même vernis et mêmes reflets que le tressage choisi (validé par Romeo, 20 novembre 2026).
+ * Pas de motif ni d'UV : couleur unie (c4), éclairage identique au shader du tressage.
+ */
+const CONTOUR_FIBRE_VERT = `
+  varying vec3 vNormalW;
+  varying vec3 vWorldPos;
+  void main(){
+    vec4 w = modelMatrix * vec4(position, 1.0);
+    vWorldPos = w.xyz;
+    vNormalW = normalize(mat3(modelMatrix) * normal);
+    gl_Position = projectionMatrix * viewMatrix * w;
+  }`;
+
+const CONTOUR_FIBRE_FRAG = `
+  uniform vec3 uC4;
+  uniform float uRough, uEnv;
+  uniform vec3 uKeyDir, uFillDir, uRimDir;
+  varying vec3 vNormalW;
+  varying vec3 vWorldPos;
+  const float PI = 3.14159265;
+  vec3 toLin(vec3 c){ return pow(max(c,0.0), vec3(2.2)); }
+  vec3 toSRGB(vec3 c){ return pow(max(c,0.0), vec3(1.0/2.2)); }
+  float ggx(float ndh, float a){ float a2 = a*a; float d = ndh*ndh*(a2-1.0)+1.0; return a2/(PI*d*d); }
+  vec3 lightSpec(vec3 N, vec3 V, vec3 L, float a, float f0){
+    vec3 H = normalize(L+V);
+    float ndl = max(dot(N,L),0.0);
+    float ldh = max(dot(L,H),0.0);
+    float F = f0 + (1.0-f0)*pow(1.0-max(dot(V,H),0.0),5.0);
+    return vec3(ggx(max(dot(N,H),0.0), a) * F * 0.25/max(ldh*ldh,0.08) * ndl);
+  }
+  vec3 studioEnv(vec3 R, float rough){
+    float y = R.y;
+    vec3 env = mix(vec3(0.10,0.10,0.11), vec3(0.34,0.34,0.34), smoothstep(-0.35,0.05,y));
+    env = mix(env, vec3(0.52,0.52,0.51), smoothstep(0.05,0.80,y));
+    float sb = dot(R, normalize(vec3(0.38,0.82,0.43)));
+    float w = 0.985 - rough*0.22;
+    env += vec3(3.4) * smoothstep(w-0.05-rough*0.25, w, sb) * (1.0 - clamp(rough*1.3,0.0,0.75));
+    float sb2 = dot(R, normalize(vec3(-0.62,0.55,0.55)));
+    env += vec3(0.7) * smoothstep(0.90-rough*0.3, 0.97, sb2);
+    return env;
+  }
+  void main(){
+    vec3 N = normalize(vNormalW);
+    if(!gl_FrontFacing) N = -N;
+    vec3 V = normalize(cameraPosition - vWorldPos);
+    if(dot(N,V) < 0.0) N = -N;
+    // Matière : PVC teinté masse, vernis brillant (mêmes réglages que le tressage)
+    float rough = mix(0.30, 0.05, uRough);
+    float a = rough*rough;
+    const float F0 = 0.045;
+    vec3 alb = toLin(uC4);
+    float ndv = max(dot(N,V), 1e-4);
+    vec3 sky = vec3(1.0,0.985,0.955), gnd = vec3(0.70,0.73,0.75);
+    vec3 E = mix(gnd, sky, N.y*0.5+0.5) * 0.46
+           + vec3(1.0,0.955,0.875) * 0.66 * max(dot(N,uKeyDir),0.0)
+           + vec3(0.87,0.92,1.0) * 0.14 * max(dot(N,uFillDir),0.0)
+           + vec3(1.0) * 0.10 * max(dot(N,uRimDir),0.0);
+    float Fenv = F0 + (max(1.0-rough, F0) - F0) * pow(1.0 - ndv, 5.0);
+    vec3 R = reflect(-V, N);
+    vec3 envSpec = studioEnv(R, rough) * Fenv * uEnv;
+    vec3 spec = lightSpec(N,V,uKeyDir,a,F0) * vec3(1.0,0.955,0.875) * 0.66
+              + lightSpec(N,V,uFillDir,a,F0) * 0.14
+              + lightSpec(N,V,uRimDir,a,F0) * 0.10;
+    vec3 col = alb * E * (1.0 - Fenv) + spec + envSpec;
+    vec3 over = max(col - 0.82, 0.0);
+    col = min(col, 0.82) + 0.18*(1.0 - exp(-over/0.18));
+    gl_FragColor = vec4(toSRGB(col), 1.0);
+  }`;
+
+function contourFibreCfg(weaveId){ return FIBRE_SETTINGS[weaveId] || FIBRE_SETTINGS.bourdon; }
+
+function makeContourFibreMat(weaveId, hex){
+  const cfg = contourFibreCfg(weaveId);
+  const mat = new THREE.ShaderMaterial({
+    uniforms:{
+      uC4:{value:hexToVec3(hex)},
+      uRough:{value:cfg.rough}, uEnv:{value:cfg.env},
+      uKeyDir:{value:new THREE.Vector3(3.4,5.6,3.6).normalize()},
+      uFillDir:{value:new THREE.Vector3(-3.5,2.4,2.8).normalize()},
+      uRimDir:{value:new THREE.Vector3(-1.4,3.1,-3.2).normalize()},
+    },
+    vertexShader:CONTOUR_FIBRE_VERT,
+    fragmentShader:CONTOUR_FIBRE_FRAG,
+    side:THREE.DoubleSide,
+  });
+  mat.name = 'mat_contour_fibre';
+  mat.userData.isContourFibre = true;
+  return mat;
+}
+
+function updateContourFibreMat(mat, weaveId, hex){
+  const cfg = contourFibreCfg(weaveId);
+  mat.uniforms.uC4.value.copy(hexToVec3(hex));
+  mat.uniforms.uRough.value = cfg.rough;
+  mat.uniforms.uEnv.value = cfg.env;
+}

@@ -27,7 +27,7 @@
 <script src="./harmonies-validees.js"></script>
 <link rel="stylesheet" href="./vendor/fonts.css">
 <script src="./weave-materials.js"></script>
-<script src="./fibre-material.js"></script>
+<script src="./fibre-material.js?v=contour1"></script>
 <script src="./bois-material.js"></script>
 <script src="./analytics.js"></script>
 <style>
@@ -2161,6 +2161,11 @@ function cleanContourMaterial(mat){
 }
 
 function makeContourMaterial(){
+  // Contour = même fibre que le tressage, en plus épais (fibre-material.js). Ancien rendu mat en secours.
+  if(typeof makeContourFibreMat === 'function'){
+    try{ return makeContourFibreMat(S.weave, getC4().hex); }
+    catch(err){ console.warn('Contour : matière du tressage indisponible, ancien rendu utilisé.', err); }
+  }
   const mat = new THREE.MeshStandardMaterial({
     color: paletteColorToLinear(getC4().hex),
     roughness: 0.74,
@@ -2172,6 +2177,10 @@ function makeContourMaterial(){
 
 function applyContourColor(ch){
   const mat = Array.isArray(ch.material) ? null : ch.material;
+  if(mat && mat.userData?.isContourFibre && typeof updateContourFibreMat === 'function'){
+    updateContourFibreMat(mat, S.weave, getC4().hex);
+    return;
+  }
   if(!mat || mat.uniforms || !mat.color || !mat.userData?.isContourMaterial){
     ch.material = makeContourMaterial();
   } else {
