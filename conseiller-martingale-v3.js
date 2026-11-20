@@ -286,10 +286,10 @@
   const THEMES = {
     brasserie: {
       label: 'Brasserie parisienne', vifs: 1,
-      palette: ['noir', 'bordeaux', 'rouge', 'sapin', 'bleu-marine', 'marron', 'chocolat', 'olive', 'gris', 'argent', 'blanc', 'ivoire', 'creme', 'ecru', 'naturel', 'saumon', 'ciel'],
+      palette: ['noir', 'bordeaux', 'rouge', 'sapin', 'bleu-marine', 'marron', 'chocolat', 'olive', 'gris', 'argent', 'blanc', 'ivoire', 'creme', 'ecru', 'naturel', 'saumon', 'ciel', 'bouteille', 'vermillon'],
       accents: ['or', 'bronze'],
       recettes: { classique: 1.2, contraste: 1, camaieu: 1, profond: 1.1, 'neutre-vif': 0.8 },
-      contour: ['noir', 'blanc', 'creme', 'ecru', 'bordeaux', 'sapin', 'bleu-marine'],
+      contour: ['noir', 'blanc', 'creme', 'ecru', 'bordeaux', 'sapin', 'bleu-marine', 'bouteille'],
       signatures: [['noir', 'creme', 'or', 'noir'], ['bordeaux', 'creme', 'noir', 'creme'], ['sapin', 'ivoire', 'bordeaux', 'ivoire'],
         ['bleu-marine', 'ecru', 'rouge', 'ecru'], ['bordeaux', 'saumon', 'noir', 'bordeaux'], ['bleu-marine', 'ciel', 'noir', 'bleu-marine'],
         ['marron', 'creme', 'sapin', 'marron'], ['noir', 'gris', 'rouge', 'noir']],
@@ -298,7 +298,7 @@
     },
     riviera: {
       label: 'Riviera', vifs: 2,
-      palette: ['ciel', 'bleu', 'turquoise', 'jaune-pastel', 'jaune', 'rose', 'peche', 'saumon', 'terracotta', 'vert-344', 'lavende', 'blanc', 'ivoire', 'creme', 'bleu-marine', 'rouge-eau', 'orange', 'vert-eau'],
+      palette: ['ciel', 'bleu', 'turquoise', 'jaune-pastel', 'jaune', 'rose', 'peche', 'saumon', 'terracotta', 'vert-344', 'lavende', 'blanc', 'ivoire', 'creme', 'bleu-marine', 'rouge-eau', 'orange', 'vert-eau', 'vermillon'],
       accents: ['bleu-roi', 'framboise'],
       recettes: { pastel: 1.3, classique: 1, contraste: 1, voisines: 1.1, complement: 1, camaieu: 0.9 },
       contour: ['blanc', 'ivoire', 'bleu-marine', 'bleu-roi', 'turquoise', 'rouge-eau'],
@@ -310,7 +310,7 @@
     },
     cotebasque: {
       label: 'Côte basque', vifs: 1,
-      palette: ['rouge', 'bordeaux', 'sapin', 'kaki', 'bleu-marine', 'vert-eau', 'vert-2260', 'blanc', 'ecru', 'creme', 'ivoire', 'noir', 'naturel', 'saumon'],
+      palette: ['rouge', 'bordeaux', 'sapin', 'kaki', 'bleu-marine', 'vert-eau', 'vert-2260', 'blanc', 'ecru', 'creme', 'ivoire', 'noir', 'naturel', 'saumon', 'bouteille', 'vermillon'],
       accents: [],
       recettes: { classique: 1.2, contraste: 1, profond: 1, camaieu: 0.9 },
       contour: ['blanc', 'rouge', 'sapin', 'ecru', 'bleu-marine'],
@@ -321,7 +321,7 @@
     },
     barvin: {
       label: 'Bar à vin', vifs: 1,
-      palette: ['bordeaux', 'prune', 'fushia', 'marron', 'chocolat', 'brun', 'olive', 'sapin', 'noir', 'bleu-marine', 'ecru', 'creme', 'naturel', 'kaki', 'gris', 'ivoire', 'saumon', 'peche', 'terracotta'],
+      palette: ['bordeaux', 'prune', 'fushia', 'marron', 'chocolat', 'brun', 'olive', 'sapin', 'noir', 'bleu-marine', 'ecru', 'creme', 'naturel', 'kaki', 'gris', 'ivoire', 'saumon', 'peche', 'terracotta', 'bouteille'],
       accents: ['or', 'bronze', 'rouge-eau', 'framboise'],
       recettes: { profond: 1.3, camaieu: 1.2, classique: 0.8, contraste: 1, 'neutre-vif': 0.9 },
       contour: ['noir', 'marron', 'chocolat', 'bordeaux', 'creme', 'ecru', 'olive'],
@@ -333,10 +333,10 @@
     },
     hotelchic: {
       label: 'Hôtel chic', vifs: 0,
-      palette: ['creme', 'ecru', 'ivoire', 'blanc', 'gris', 'argent', 'vert-2260', 'vert-diamant', 'sapin', 'olive', 'kaki', 'naturel', 'bronze', 'noir', 'marron', 'chocolat', 'bleu-marine', 'ciel', 'lavende', 'saumon'],
+      palette: ['creme', 'ecru', 'ivoire', 'blanc', 'gris', 'argent', 'vert-2260', 'vert-diamant', 'sapin', 'olive', 'kaki', 'naturel', 'bronze', 'noir', 'marron', 'chocolat', 'bleu-marine', 'ciel', 'lavende', 'saumon', 'bouteille'],
       accents: ['or'],
       recettes: { classique: 1, camaieu: 1.3, contraste: 1, profond: 1.1, pastel: 1 },
-      contour: ['noir', 'creme', 'ecru', 'olive', 'marron', 'sapin', 'gris'],
+      contour: ['noir', 'creme', 'ecru', 'olive', 'marron', 'sapin', 'gris', 'bouteille'],
       signatures: [['creme', 'noir', 'or', 'noir'], ['vert-2260', 'olive', 'or', 'olive'], ['ecru', 'bleu-marine', 'or', 'ecru'],
         ['gris', 'noir', 'argent', 'noir'], ['ivoire', 'chocolat', 'bronze', 'chocolat'], ['argent', 'ecru', 'noir', 'gris'],
         ['sapin', 'vert-diamant', 'creme', 'sapin'], ['olive', 'ivoire', 'bronze', 'olive'], ['bleu-marine', 'gris', 'or', 'bleu-marine'], ['naturel', 'ecru', 'marron', 'marron']],
@@ -369,10 +369,10 @@
     },
     pop: {
       label: 'Pop graphique', vifs: 3, ose: true,
-      palette: ['jaune', 'orange', 'framboise', 'fushia', 'bleu-roi', 'bleu', 'turquoise', 'vert-citron', 'vert-pomme', 'rose', 'rouge', 'rouge-eau', 'prune', 'lavende', 'jaune-pastel', 'blanc', 'noir', 'creme', 'bleu-marine'],
+      palette: ['jaune', 'orange', 'framboise', 'fushia', 'bleu-roi', 'bleu', 'turquoise', 'vert-citron', 'vert-pomme', 'rose', 'rouge', 'rouge-eau', 'prune', 'lavende', 'jaune-pastel', 'blanc', 'noir', 'creme', 'bleu-marine', 'vermillon'],
       accents: [],
       recettes: { contraste: 1.2, complement: 1.2, voisines: 1.1, classique: 0.7, profond: 1, pastel: 0.9, 'neutre-vif': 0.8 },
-      contour: ['noir', 'blanc', 'bleu-roi', 'jaune', 'framboise'],
+      contour: ['noir', 'blanc', 'bleu-roi', 'jaune', 'framboise', 'vermillon'],
       signatures: [['jaune', 'blanc', 'bleu-roi', 'noir'], ['framboise', 'blanc', 'orange', 'blanc'], ['bleu-roi', 'blanc', 'jaune', 'bleu-roi'],
         ['vert-citron', 'noir', 'rose', 'noir'], ['orange', 'bleu-roi', 'blanc', 'noir'], ['framboise', 'orange', 'blanc', 'noir'],
         ['bleu-roi', 'jaune', 'blanc', 'bleu-roi'], ['rouge', 'rose', 'noir', 'noir'], ['turquoise', 'orange', 'noir', 'blanc'], ['fushia', 'jaune-pastel', 'noir', 'noir'], ['bleu-roi', 'rose', 'blanc', 'bleu-roi']],

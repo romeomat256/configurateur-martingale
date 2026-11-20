@@ -23,7 +23,7 @@
 <script src="./vendor/DRACOLoader.js"></script>
 <script src="./vendor/ktx2-loader.js"></script>
 <script src="./vendor/meshopt_decoder.js"></script>
-<script src="./conseiller-martingale-v3.js"></script>
+<script src="./conseiller-martingale-v3.js?v=bv1"></script>
 <script src="./harmonies-validees.js"></script>
 <link rel="stylesheet" href="./vendor/fonts.css">
 <script src="./weave-materials.js"></script>
@@ -705,6 +705,7 @@ const COLORS=[
   {id:'rouge',       name:'Rouge cerise',     hex:'#BA0C2F', pantone:'200 C'},
   {id:'rouge-eau',   name:'Corail',           hex:'#E56A54', pantone:'7416 C'},
   {id:'bordeaux',    name:'Rouge bordeaux',   hex:'#9B2242', pantone:'7420 C'},
+  {id:'vermillon',   name:'Rouge vermillon',  hex:'#DA291C', pantone:'485 C'},
   // Violets — Mystère
   {id:'prune',       name:'Prune veloutée',   hex:'#A15A95', pantone:'7655 C'},
   {id:'lavende',     name:'Lavande séchée',   hex:'#C5B4E3', pantone:'2635 C'},
@@ -715,6 +716,7 @@ const COLORS=[
   {id:'kaki',        name:'Kaki feutré',      hex:'#8A8D4A', pantone:'5767 C'},
   {id:'olive',       name:'Olive tendre',     hex:'#4D5038', pantone:'7764 C'},
   {id:'sapin',       name:'Sapin foncé',      hex:'#0D5D3F', pantone:'6160 C'},
+  {id:'bouteille',   name:'Vert bouteille',   hex:'#154734', pantone:'3435 C'},
   {id:'vert-344',    name:'Vert menthe',      hex:'#A0DAB3', pantone:'344 C'},
   {id:'vert-2260',   name:'Vert kaki clair',  hex:'#B6CFAE', pantone:'2260 C'},
   {id:'vert-pomme',  name:'Vert pomme',       hex:'#BCE194', pantone:'7486 C'},
@@ -1277,9 +1279,9 @@ const ADVISOR_SHORT_NAMES={
   blanc:'blanc',ivoire:'ivoire',creme:'crème',ecru:'écru',argent:'argent',gris:'gris cendre',noir:'noir',
   naturel:'camel',or:'or',bronze:'bronze',brun:'brun miel',chocolat:'chocolat',marron:'marron glacé',
   peche:'pêche',saumon:'saumon',terracotta:'corail poudré',orange:'orange',jaune:'jaune citron',
-  rose:'rose bonbon',framboise:'framboise',fushia:'fuchsia',rouge:'rouge cerise','rouge-eau':'corail',bordeaux:'rouge bordeaux',
+  rose:'rose bonbon',framboise:'framboise',fushia:'fuchsia',rouge:'rouge cerise','rouge-eau':'corail',bordeaux:'rouge bordeaux',vermillon:'rouge vermillon',
   prune:'prune',lavende:'lavande','vert-citron':'vert citron','vert-eau':"vert d'eau",turquoise:'turquoise',
-  kaki:'kaki',olive:'olive',sapin:'vert sapin','vert-344':'vert menthe','vert-2260':'vert kaki clair',
+  kaki:'kaki',olive:'olive',sapin:'vert sapin',bouteille:'vert bouteille','vert-344':'vert menthe','vert-2260':'vert kaki clair',
   'vert-pomme':'vert pomme','vert-diamant':'vert diamant',ciel:'bleu ciel',bleu:'bleu glacier',
   'bleu-roi':'bleu roi','bleu-marine':'bleu marine','jaune-pastel':'jaune pâle'
 };
