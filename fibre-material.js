@@ -17,7 +17,7 @@ const FIBRE_SETTINGS = {
   serge:  { weaveType:0, grid:[30,16], rough:0.93, relief:0.69, ao:0.32, env:0.65, pairs:1, refUvMm:[190,146.5], rawShapes:['tradition','harpe'] },
   damier: { weaveType:1, grid:[10,8],  rough:0.80, relief:0.76, ao:0.72, env:0.53, pairs:1, refUvMm:[51.1,40.4], rawShapes:['tradition'] },
   chevron:{ weaveType:0, grid:[12,6],  rough:0.72, relief:0.64, ao:0.42, env:1.11, pairs:1, refUvMm:[84.9,37.7], rawShapes:['tradition'] },
-  natte:  { weaveType:2, grid:[8,6],   rough:0.93, relief:0.69, ao:0.32, env:0.65, pairs:1, refUvMm:[40.7,30.7], rawShapes:['tradition'] },
+  natte:  { weaveType:2, grid:[8,6],   rough:0.93, relief:0.69, ao:0.32, env:0.65, pairs:1, refUvMm:[27.13,20.47], rawShapes:['tradition'] },
   // Bourdon : le masque PNG est une bande de 10 rangées, répétée 5 fois en hauteur sur une unité UV
   bourdon:{ weaveType:3, grid:[89,50], maskGrid:[89,10], rough:0.66, relief:0.89, ao:0.51, env:0.35, pairs:1, refUvMm:[457.3,250.1], rawShapes:['tradition'] },
   // Maille : brins dans toutes les directions. Le relief vient de la carte de fibre (fibreMap),
